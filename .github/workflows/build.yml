@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Numer wersji (np. 0.3.100)"
+        description: "Podaj wersję (np. 0.3.100)"
         required: true
 
 jobs:
@@ -14,18 +14,22 @@ jobs:
       contents: write
 
     steps:
-
+      # -------------------------------------------------------
+      # CHECKOUT
+      # -------------------------------------------------------
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Pobierz wersję
+      # -------------------------------------------------------
+      # POBIERZ NUMER WERSJI
+      # -------------------------------------------------------
+      - name: Ustaw wersję
         run: |
-          VERSION="${{ github.event.inputs.version }}"
-          echo "VERSION=$VERSION" >> $GITHUB_ENV
+          echo "VERSION=${{ github.event.inputs.version }}" >> $GITHUB_ENV
 
-      # ============================================
-      # 1) SCALENIE WSZYSTKICH PLIKÓW Z DIST DO pack.js
-      # ============================================
+      # -------------------------------------------------------
+      # BUILD – SCALENIE dist/*.js + dist/*.json → matches-cards-pack.js
+      # -------------------------------------------------------
       - name: Build pack.js
         run: |
           VERSION="${{ env.VERSION }}"
@@ -34,37 +38,39 @@ jobs:
           echo "// Auto-generated from dist/ folder" >> matches-cards-pack.js
           echo "" >> matches-cards-pack.js
 
-          # Dołączamy wszystkie pliki JS i JSON w logicznej kolejności
+          # Dołączamy pliki .js
           for f in dist/*.js; do
+            [ -e "$f" ] || continue
             echo "// ========== FILE: ${f} ==========" >> matches-cards-pack.js
             cat "$f" >> matches-cards-pack.js
             echo "" >> matches-cards-pack.js
           done
 
-          # Jeżeli są jakiekolwiek pliki .json w dist i chcesz je pakować
-          for f in dist/*.json 2>/dev/null; do
+          # Dołączamy pliki .json (Jeśli są konieczne)
+          for f in dist/*.json; do
+            [ -e "$f" ] || continue
             echo "// ========== JSON INCLUDED: ${f} ==========" >> matches-cards-pack.js
             cat "$f" >> matches-cards-pack.js
             echo "" >> matches-cards-pack.js
           done
 
-      # ============================================
-      # 2) KOPIOWANIE manifest.json i hacs.json Z DIST
-      # ============================================
-      - name: Kopiuj manifest + hacs do root i ustaw wersję
+      # -------------------------------------------------------
+      # SKOPIUJ manifest.json + hacs.json z dist/ → root
+      # I POPRAW WERSJĘ
+      # -------------------------------------------------------
+      - name: Kopiuj manifest + hacs
         run: |
           VERSION="${{ env.VERSION }}"
 
           cp dist/manifest.json manifest.json
           cp dist/hacs.json hacs.json
 
-          # Ustawiamy wersję w manifest.json
           sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" manifest.json
 
-      # ============================================
-      # 3) COMMIT + TAG
-      # ============================================
-      - name: Commit + tag
+      # -------------------------------------------------------
+      # GIT COMMIT + TAG
+      # -------------------------------------------------------
+      - name: Commit i tag
         run: |
           VERSION="${{ env.VERSION }}"
 
@@ -72,24 +78,21 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
           git add matches-cards-pack.js manifest.json hacs.json
-          git commit -m "Release ${VERSION}"
+          git commit -m "Release ${VERSION}" || echo "Brak zmian"
           git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin HEAD --tags
 
-      # ============================================
-      # 4) RELEASE BEZ ZIP
-      # ============================================
-      - name: Release
+      # -------------------------------------------------------
+      # RELEASE (bez pliku ZIP)
+      # -------------------------------------------------------
+      - name: Utwórz GitHub Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.VERSION }}
-          name: "Matches Cards Pack ${{ env.VERSION }}"
+          name: "Matches Card Pack ${{ env.VERSION }}"
           body: |
-            Auto-build pack zawierający:
-            - matches-card
-            - matches-card-editor
-            - league-table-card
-            - league-table-card-editor
-            manifest.json + hacs.json skopiowane z dist
-            Jedna paczka — wiele kart dla HACS.
-          files: matches-cards-pack.js
+            Automatycznie zbudowany pakiet:
+            - matches-cards-pack.js (karta + tabela ligowa)
+            - manifest.json + hacs.json przeniesione do root
+          files: |
+            matches-cards-pack.js
