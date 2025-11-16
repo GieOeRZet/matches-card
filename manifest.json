@@ -1,13 +1,14 @@
 {
   "domain": "matches-card",
-  "name": "Matches Card (90minut)",
-  "version": "0.3.102",
+  "name": "Matches Cards Pack (90minut)",
   "documentation": "https://github.com/GieOeRZet/matches-card",
-  "type": "module",
+  "version": "0.3.103",
   "render_readme": true,
+  "type": "module",
+  "frontend": true,
   "resources": [
     {
-      "file": "matches-card-pack.js",
+      "file": "matches-cards-pack.js",
       "type": "module"
     }
   ]
