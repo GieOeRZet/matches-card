@@ -1,10 +1,10 @@
-name: A Build Matches Card (single file)
+name: Build Matches Cards Pack
 
 on:
   workflow_dispatch:
     inputs:
       version:
-        description: "Wersja (np. 0.3.020)"
+        description: "Numer wersji (np. 0.3.100)"
         required: true
 
 jobs:
@@ -18,72 +18,78 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-
-      - name: Ustaw wersję
+      - name: Pobierz wersję
         run: |
           VERSION="${{ github.event.inputs.version }}"
           echo "VERSION=$VERSION" >> $GITHUB_ENV
 
-
-      # -------------------------------------------------------
-      # 1. SCALANIE KARTY + EDYTORA Z DIST DO ROOT
-      # -------------------------------------------------------
-      - name: Połącz kartę + edytor w jeden plik
+      # ============================================
+      # 1) SCALENIE WSZYSTKICH PLIKÓW Z DIST DO pack.js
+      # ============================================
+      - name: Build pack.js
         run: |
           VERSION="${{ env.VERSION }}"
 
-          # Tworzymy plik produkcyjny
-          echo "// Matches Card (90minut) – version ${VERSION}" > matches-card.js
-          echo "// Auto-generated build: karta + edytor w jednym pliku" >> matches-card.js
-          echo "" >> matches-card.js
+          echo "// Matches Cards Pack – version ${VERSION}" > matches-cards-pack.js
+          echo "// Auto-generated from dist/ folder" >> matches-cards-pack.js
+          echo "" >> matches-cards-pack.js
 
-          # dołącz plik główny z dist
-          cat dist/matches-card.js >> matches-card.js
-          echo "" >> matches-card.js
-          echo "// ========== EDYTOR ========== " >> matches-card.js
-          echo "" >> matches-card.js
+          # Dołączamy wszystkie pliki JS i JSON w logicznej kolejności
+          for f in dist/*.js; do
+            echo "// ========== FILE: ${f} ==========" >> matches-cards-pack.js
+            cat "$f" >> matches-cards-pack.js
+            echo "" >> matches-cards-pack.js
+          done
 
-          # dołącz plik edytora
-          cat dist/matches-card-editor.js >> matches-card.js
+          # Jeżeli są jakiekolwiek pliki .json w dist i chcesz je pakować
+          for f in dist/*.json 2>/dev/null; do
+            echo "// ========== JSON INCLUDED: ${f} ==========" >> matches-cards-pack.js
+            cat "$f" >> matches-cards-pack.js
+            echo "" >> matches-cards-pack.js
+          done
 
-
-      # -------------------------------------------------------
-      # 2. PRZENIESIENIE (TWORZENIE KOPII) MANIFEST + HACS
-      # -------------------------------------------------------
+      # ============================================
+      # 2) KOPIOWANIE manifest.json i hacs.json Z DIST
+      # ============================================
       - name: Kopiuj manifest + hacs do root i ustaw wersję
         run: |
           VERSION="${{ env.VERSION }}"
 
-          # kopiujemy pliki do root
           cp dist/manifest.json manifest.json
           cp dist/hacs.json hacs.json
 
-          # aktualizujemy tylko kopię w root:
+          # Ustawiamy wersję w manifest.json
           sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" manifest.json
 
-
-      # -------------------------------------------------------
-      # 3. COMMIT + TAG
-      # -------------------------------------------------------
-      - name: Commit zmian i utwórz tag
+      # ============================================
+      # 3) COMMIT + TAG
+      # ============================================
+      - name: Commit + tag
         run: |
           VERSION="${{ env.VERSION }}"
 
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add matches-card.js manifest.json hacs.json
+          git add matches-cards-pack.js manifest.json hacs.json
           git commit -m "Release ${VERSION}"
           git tag -a "${VERSION}" -m "Release ${VERSION}"
           git push origin HEAD --tags
 
-
-      # -------------------------------------------------------
-      # 4. RELEASE (bez ZIP — wszystko w root)
-      # -------------------------------------------------------
-      - name: Utwórz Release
+      # ============================================
+      # 4) RELEASE BEZ ZIP
+      # ============================================
+      - name: Release
         uses: softprops/action-gh-release@v1
         with:
           tag_name: ${{ env.VERSION }}
-          name: "Matches Card ${{ env.VERSION }}"
-          body: "Zbudowana automatycznie wersja – scalony plik karty + edytora.\nmanifest.json i hacs.json skopiowane do root."
+          name: "Matches Cards Pack ${{ env.VERSION }}"
+          body: |
+            Auto-build pack zawierający:
+            - matches-card
+            - matches-card-editor
+            - league-table-card
+            - league-table-card-editor
+            manifest.json + hacs.json skopiowane z dist
+            Jedna paczka — wiele kart dla HACS.
+          files: matches-cards-pack.js
