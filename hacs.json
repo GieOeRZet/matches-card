@@ -1,0 +1,9 @@
+{
+  "name": "Matches Card (90minut)",
+  "filename": "matches-card.js",
+  "content_in_root": false,
+  "country": "PL",
+  "homeassistant": "2023.5.0",
+  "category": "plugin",
+  "render_readme": true
+}
