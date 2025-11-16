@@ -1,197 +1,493 @@
-class MatchesCardEditor extends HTMLElement {
+// ============================================================================
+//  Matches Card Editor – v0.3.051 (pełny, nowoczesny, kompatybilny)
+//  Obsługuje wszystkie pola YAML + debounce 700 ms + odczyt wartości
+// ============================================================================
 
-  constructor() {
-    super();
-    this._config = {};
-    this._updateTimeout = null;
-    this.attachShadow({ mode: "open" });
-  }
+(function () {
+  const DEFAULT_CONFIG = {
+    name: "90minut Matches",
+    show_name: true,
+    show_logos: true,
+    full_team_names: true,
+    show_result_symbols: true,
+    lite_mode: false,
 
-  setConfig(config) {
-    this._config = JSON.parse(JSON.stringify(config || {}));
-    this.render();
-  }
+    fill_mode: "gradient",
 
-  set hass(hass) {
-    this._hass = hass;
-  }
+    font_size: {
+      date: 0.9,
+      status: 0.8,
+      teams: 1.0,
+      score: 1.0,
+    },
 
-  // Debounce — 700ms
-  _debounceSave() {
-    clearTimeout(this._updateTimeout);
-    this._updateTimeout = setTimeout(() => {
-      const event = new CustomEvent("config-changed", {
-        detail: { config: this._config },
+    icon_size: {
+      league: 26,
+      crest: 24,
+      result: 26,
+    },
+
+    colors: {
+      win: "#3ba55d",
+      draw: "#468cd2",
+      loss: "#e23b3b",
+    },
+
+    gradient: {
+      start: 35,
+      end: 100,
+      alpha_start: 0.0,
+      alpha_end: 0.55,
+    },
+
+    zebra_color: "#f0f0f0",
+    zebra_alpha: 0.4,
+  };
+
+  const deepMerge = (target, source) => {
+    if (!source) return target;
+    Object.keys(source).forEach((key) => {
+      const sv = source[key];
+      if (sv && typeof sv === "object" && !Array.isArray(sv)) {
+        if (!target[key] || typeof target[key] !== "object") {
+          target[key] = {};
+        }
+        deepMerge(target[key], sv);
+      } else {
+        target[key] = sv;
+      }
+    });
+    return target;
+  };
+
+  class MatchesCardEditor extends HTMLElement {
+    constructor() {
+      super();
+      this._config = {};
+      this._debouncers = {};
+    }
+
+    setConfig(config) {
+      this._config = config || {};
+      this._render();
+    }
+
+    set hass(hass) {
+      this._hass = hass;
+    }
+
+    _effectiveConfig() {
+      const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+      return deepMerge(base, this._config || {});
+    }
+
+    _dispatchConfig(config) {
+      const ev = new Event("config-changed", {
         bubbles: true,
         composed: true,
       });
-      this.dispatchEvent(event);
-    }, 700);
-  }
-
-  _inputChanged(ev, path) {
-    const value = ev.target.type === "number"
-      ? Number(ev.target.value)
-      : ev.target.value;
-
-    let ref = this._config;
-    const parts = path.split(".");
-
-    while (parts.length > 1) {
-      const p = parts.shift();
-      if (!ref[p]) ref[p] = {};
-      ref = ref[p];
-    }
-    ref[parts[0]] = value;
-
-    this._debounceSave();
-  }
-
-  _toggleChanged(ev, path) {
-    let ref = this._config;
-    const parts = path.split(".");
-
-    while (parts.length > 1) {
-      const p = parts.shift();
-      if (!ref[p]) ref[p] = {};
-      ref = ref[p];
+      ev.detail = { config };
+      this.dispatchEvent(ev);
     }
 
-    ref[parts[0]] = ev.target.checked;
-    this._debounceSave();
-  }
+    _updatePath(path, value) {
+      const cfg = JSON.parse(JSON.stringify(this._config || {}));
+      const keys = Array.isArray(path) ? path : String(path).split(".");
+      let obj = cfg;
+      for (let i = 0; i < keys.length - 1; i++) {
+        const k = keys[i];
+        if (!obj[k] || typeof obj[k] !== "object") {
+          obj[k] = {};
+        }
+        obj = obj[k];
+      }
+      obj[keys[keys.length - 1]] = value;
+      this._config = cfg;
+      this._dispatchConfig(cfg);
+    }
 
-  _renderSwitch(title, path) {
-    const val = this._get(path);
-    return `
-      <ha-formfield label="${title}">
-        <ha-switch .checked=${val === true}
-          @change=${(ev) => this._toggleChanged(ev, path)}>
-        </ha-switch>
-      </ha-formfield>
-    `;
-  }
+    _debouncedUpdate(path, value) {
+      const key = Array.isArray(path) ? path.join(".") : String(path);
+      if (this._debouncers[key]) {
+        clearTimeout(this._debouncers[key]);
+      }
+      this._debouncers[key] = setTimeout(() => {
+        this._updatePath(path, value);
+      }, 700);
+    }
 
-  _renderNumber(title, path, min = 0, max = 999, step = 1) {
-    const val = this._get(path);
-    return `
-      <div class="form-row">
-        <label>${title}</label>
-        <ha-textfield
-          type="number"
-          min="${min}"
-          max="${max}"
-          step="${step}"
-          .value="${val}"
-          @input=${(ev) => this._inputChanged(ev, path)}
-        ></ha-textfield>
-      </div>
-    `;
-  }
+    _bindInput(selector, path, parser = (v) => v, debounced = true) {
+      const el = this.querySelector(selector);
+      if (!el) return;
+      el.addEventListener("input", (ev) => {
+        const v = parser(ev.target.value);
+        if (debounced) this._debouncedUpdate(path, v);
+        else this._updatePath(path, v);
+      });
+    }
 
-  _renderColor(title, path) {
-    const val = this._get(path);
-    return `
-      <div class="form-row">
-        <label>${title}</label>
-        <input type="color" class="color-input"
-          .value="${val}"
-          @input=${(ev) => this._inputChanged(ev, path)}>
-      </div>
-    `;
-  }
+    _bindCheckbox(selector, path) {
+      const el = this.querySelector(selector);
+      if (!el) return;
+      el.addEventListener("change", (ev) => {
+        this._updatePath(path, ev.target.checked);
+      });
+    }
 
-  _renderSection(title, content) {
-    return `
-      <ha-expansion-panel>
-        <span slot="header">${title}</span>
-        <div class="section-body">
-          ${content}
+    _render() {
+      const cfg = this._effectiveConfig();
+
+      this.innerHTML = `
+        <style>
+          .mc-editor {
+            padding: 16px;
+            font-family: var(--paper-font-body1_-_font-family, inherit);
+          }
+          .mc-section {
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid var(--divider-color, #ccc);
+          }
+          .mc-section:last-of-type {
+            border-bottom: none;
+          }
+          .mc-section h3 {
+            margin: 0 0 10px;
+            font-size: 1.05rem;
+            font-weight: 600;
+          }
+          .mc-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 10px 18px;
+          }
+          .mc-field {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+          }
+          .mc-field label {
+            font-size: 0.85rem;
+            opacity: 0.9;
+          }
+          .mc-checkbox {
+            width: 16px;
+            height: 16px;
+          }
+          .mc-input,
+          .mc-number,
+          .mc-select {
+            width: 100%;
+            padding: 4px 6px;
+            border-radius: 4px;
+            border: 1px solid var(--divider-color, #aaa);
+            background: var(--card-background-color, #fff);
+            color: var(--primary-text-color, #000);
+          }
+          .mc-number {
+            text-align: right;
+          }
+          .mc-color {
+            width: 48px;
+            height: 28px;
+            border-radius: 4px;
+            border: 1px solid var(--divider-color, #aaa);
+          }
+          .mc-note {
+            font-size: 0.75rem;
+            opacity: 0.7;
+          }
+        </style>
+
+        <div class="mc-editor">
+
+          <!-- PODSTAWY -->
+          <div class="mc-section">
+            <h3>Podstawy</h3>
+            <div class="mc-grid">
+              <div class="mc-field">
+                <label>Encja sensora</label>
+                <input id="mc-entity" class="mc-input" value="${cfg.entity || ""}">
+              </div>
+
+              <div class="mc-field">
+                <label>Nazwa karty (header)</label>
+                <input id="mc-name" class="mc-input" value="${cfg.name}">
+              </div>
+
+              <div class="mc-field">
+                <label>
+                  <input id="mc-show-name" class="mc-checkbox" type="checkbox"
+                    ${cfg.show_name ? "checked" : ""}>
+                  Pokaż nazwę karty
+                </label>
+              </div>
+
+              <div class="mc-field">
+                <label>
+                  <input id="mc-show-logos" class="mc-checkbox" type="checkbox"
+                    ${cfg.show_logos ? "checked" : ""}>
+                  Pokaż herby drużyn
+                </label>
+              </div>
+
+              <div class="mc-field">
+                <label>
+                  <input id="mc-full-names" class="mc-checkbox" type="checkbox"
+                    ${cfg.full_team_names ? "checked" : ""}>
+                  Pełne nazwy drużyn
+                </label>
+              </div>
+
+              <div class="mc-field">
+                <label>
+                  <input id="mc-show-result-symbols" class="mc-checkbox" type="checkbox"
+                    ${cfg.show_result_symbols ? "checked" : ""}>
+                  Pokaż symbole W/P/R
+                </label>
+              </div>
+
+              <div class="mc-field">
+                <label>
+                  <input id="mc-lite-mode" class="mc-checkbox" type="checkbox"
+                    ${cfg.lite_mode ? "checked" : ""}>
+                  Tryb LITE (bez tła ha-card)
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- TRYB WYPEŁNIENIA -->
+          <div class="mc-section">
+            <h3>Tryb wypełnienia tła</h3>
+            <div class="mc-grid">
+              <div class="mc-field">
+                <label>Tryb</label>
+                <select id="mc-fill-mode" class="mc-select">
+                  <option value="gradient" ${cfg.fill_mode === "gradient" ? "selected" : ""}>
+                    Gradient (kolor wyniku meczu)
+                  </option>
+                  <option value="zebra" ${cfg.fill_mode === "zebra" ? "selected" : ""}>
+                    Zebra (naprzemienne wiersze)
+                  </option>
+                </select>
+              </div>
+            </div>
+
+            <div class="mc-grid" style="margin-top:12px;">
+
+              <!-- GRADIENT -->
+              <div class="mc-field">
+                <label>Gradient – start (%)</label>
+                <input id="mc-grad-start" class="mc-number" type="number"
+                  min="0" max="100" step="1" value="${cfg.gradient.start}">
+              </div>
+
+              <div class="mc-field">
+                <label>Gradient – koniec (%)</label>
+                <input id="mc-grad-end" class="mc-number" type="number"
+                  min="0" max="100" step="1" value="${cfg.gradient.end}">
+              </div>
+
+              <div class="mc-field">
+                <label>Gradient – alfa początkowa</label>
+                <input id="mc-grad-alpha-start" class="mc-number" type="number"
+                  min="0" max="1" step="0.05" value="${cfg.gradient.alpha_start}">
+              </div>
+
+              <div class="mc-field">
+                <label>Gradient – alfa końcowa</label>
+                <input id="mc-grad-alpha-end" class="mc-number" type="number"
+                  min="0" max="1" step="0.05" value="${cfg.gradient.alpha_end}">
+              </div>
+
+              <!-- ZEBRA -->
+              <div class="mc-field">
+                <label>Zebra – kolor</label>
+                <input id="mc-zebra-color" class="mc-color" type="color" value="${cfg.zebra_color}">
+              </div>
+
+              <div class="mc-field">
+                <label>Zebra – alfa</label>
+                <input id="mc-zebra-alpha" class="mc-number" type="number"
+                  min="0" max="1" step="0.05" value="${cfg.zebra_alpha}">
+              </div>
+            </div>
+          </div>
+
+          <!-- CZCIONKI -->
+          <div class="mc-section">
+            <h3>Czcionki</h3>
+            <div class="mc-grid">
+
+              <div class="mc-field">
+                <label>Data – font-size (rem)</label>
+                <input id="mc-font-date" class="mc-number" type="number"
+                  step="0.1" value="${cfg.font_size.date}">
+              </div>
+
+              <div class="mc-field">
+                <label>Status/KONIEC – font-size (rem)</label>
+                <input id="mc-font-status" class="mc-number" type="number"
+                  step="0.1" value="${cfg.font_size.status}">
+              </div>
+
+              <div class="mc-field">
+                <label>Nazwy drużyn – font-size (rem)</label>
+                <input id="mc-font-teams" class="mc-number" type="number"
+                  step="0.1" value="${cfg.font_size.teams}">
+              </div>
+
+              <div class="mc-field">
+                <label>Wynik – font-size (rem)</label>
+                <input id="mc-font-score" class="mc-number" type="number"
+                  step="0.1" value="${cfg.font_size.score}">
+              </div>
+
+            </div>
+          </div>
+
+          <!-- IKONY / KOLORY -->
+          <div class="mc-section">
+            <h3>Ikony i kolory</h3>
+            <div class="mc-grid">
+
+              <div class="mc-field">
+                <label>Logo ligi – wysokość (px)</label>
+                <input id="mc-icon-league" class="mc-number" type="number"
+                  min="8" max="64" step="1" value="${cfg.icon_size.league}">
+              </div>
+
+              <div class="mc-field">
+                <label>Herby – wysokość (px)</label>
+                <input id="mc-icon-crest" class="mc-number" type="number"
+                  min="8" max="64" step="1" value="${cfg.icon_size.crest}">
+              </div>
+
+              <div class="mc-field">
+                <label>Ikony W/P/R – rozmiar (px)</label>
+                <input id="mc-icon-result" class="mc-number" type="number"
+                  min="8" max="64" step="1" value="${cfg.icon_size.result}">
+              </div>
+
+              <div class="mc-field">
+                <label>Kolor WYGRANA (W)</label>
+                <input id="mc-color-win" class="mc-color" type="color" value="${cfg.colors.win}">
+              </div>
+
+              <div class="mc-field">
+                <label>Kolor REMIS (R)</label>
+                <input id="mc-color-draw" class="mc-color" type="color" value="${cfg.colors.draw}">
+              </div>
+
+              <div class="mc-field">
+                <label>Kolor PORAŻKA (P)</label>
+                <input id="mc-color-loss" class="mc-color" type="color" value="${cfg.colors.loss}">
+              </div>
+
+            </div>
+          </div>
+
         </div>
-      </ha-expansion-panel>
-    `;
-  }
+      `;
 
-  _get(path) {
-    const parts = path.split(".");
-    let ref = this._config;
-    for (const p of parts) {
-      ref = ref?.[p];
+      // 🌐 POWIĄZANIA (inputy, checkboksy, select)
+
+      // podstawy
+      this._bindInput("#mc-entity", "entity", (v) => v);
+      this._bindInput("#mc-name", "name", (v) => v);
+
+      this._bindCheckbox("#mc-show-name", "show_name");
+      this._bindCheckbox("#mc-show-logos", "show_logos");
+      this._bindCheckbox("#mc-full-names", "full_team_names");
+      this._bindCheckbox("#mc-show-result-symbols", "show_result_symbols");
+      this._bindCheckbox("#mc-lite-mode", "lite_mode");
+
+      // fill_mode
+      const fillMode = this.querySelector("#mc-fill-mode");
+      if (fillMode) {
+        fillMode.addEventListener("change", (ev) => {
+          this._updatePath("fill_mode", ev.target.value);
+        });
+      }
+
+      // gradient
+      this._bindInput(
+        "#mc-grad-start",
+        "gradient.start",
+        (v) => parseInt(v || "0", 10)
+      );
+      this._bindInput(
+        "#mc-grad-end",
+        "gradient.end",
+        (v) => parseInt(v || "0", 10)
+      );
+      this._bindInput(
+        "#mc-grad-alpha-start",
+        "gradient.alpha_start",
+        (v) => parseFloat(v || "0")
+      );
+      this._bindInput(
+        "#mc-grad-alpha-end",
+        "gradient.alpha_end",
+        (v) => parseFloat(v || "0")
+      );
+
+      // zebra
+      this._bindInput("#mc-zebra-color", "zebra_color", (v) => v);
+      this._bindInput(
+        "#mc-zebra-alpha",
+        "zebra_alpha",
+        (v) => parseFloat(v || "0")
+      );
+
+      // fonty
+      this._bindInput(
+        "#mc-font-date",
+        "font_size.date",
+        (v) => parseFloat(v || "0")
+      );
+      this._bindInput(
+        "#mc-font-status",
+        "font_size.status",
+        (v) => parseFloat(v || "0")
+      );
+      this._bindInput(
+        "#mc-font-teams",
+        "font_size.teams",
+        (v) => parseFloat(v || "0")
+      );
+      this._bindInput(
+        "#mc-font-score",
+        "font_size.score",
+        (v) => parseFloat(v || "0")
+      );
+
+      // ikony
+      this._bindInput(
+        "#mc-icon-league",
+        "icon_size.league",
+        (v) => parseInt(v || "0", 10)
+      );
+      this._bindInput(
+        "#mc-icon-crest",
+        "icon_size.crest",
+        (v) => parseInt(v || "0", 10)
+      );
+      this._bindInput(
+        "#mc-icon-result",
+        "icon_size.result",
+        (v) => parseInt(v || "0", 10)
+      );
+
+      // kolory W/P/R
+      this._bindInput("#mc-color-win", "colors.win", (v) => v);
+      this._bindInput("#mc-color-draw", "colors.draw", (v) => v);
+      this._bindInput("#mc-color-loss", "colors.loss", (v) => v);
     }
-    return ref;
   }
 
-  render() {
-    if (!this.shadowRoot) return;
-
-    this.shadowRoot.innerHTML = `
-      <style>
-        .section-body {
-          padding: 12px 6px 14px 6px;
-        }
-        .form-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          padding: 6px 0;
-        }
-        .form-row label {
-          color: var(--primary-text-color);
-          font-size: 15px;
-        }
-        ha-textfield {
-          width: 110px;
-        }
-        input.color-input {
-          width: 60px !important;
-          height: 32px !important;
-          border: none;
-          border-radius: 6px;
-        }
-      </style>
-
-      <ha-card>
-        ${this._renderSection("Ogólne", `
-          ${this._renderSwitch("Pokaż nazwę", "show_name")}
-          ${this._renderSwitch("Tryb LITE", "lite_mode")}
-        `)}
-
-        ${this._renderSection("Drużyny / Herby", `
-          ${this._renderSwitch("Pokaż herby", "show_logos")}
-          ${this._renderSwitch("Pełne nazwy", "full_team_names")}
-          ${this._renderNumber("Ikona liga (px)", "icon_size.league", 10, 100, 1)}
-          ${this._renderNumber("Herb (px)", "icon_size.crest", 10, 100, 1)}
-          ${this._renderNumber("Symbol W/P/R (px)", "icon_size.result", 10, 120, 1)}
-        `)}
-
-        ${this._renderSection("Wyniki W/P/R", `
-          ${this._renderSwitch("Pokaż symbole W/P/R", "show_result_symbols")}
-          ${this._renderColor("Kolor WYGRANA", "colors.win")}
-          ${this._renderColor("Kolor REMIS", "colors.draw")}
-          ${this._renderColor("Kolor PORAŻKA", "colors.loss")}
-        `)}
-
-        ${this._renderSection("Gradient", `
-          ${this._renderNumber("Start (%)", "gradient.start", 0, 100, 1)}
-          ${this._renderNumber("Koniec (%)", "gradient.end", 0, 100, 1)}
-          ${this._renderNumber("Alfa Start", "gradient.alpha_start", 0, 1, 0.01)}
-          ${this._renderNumber("Alfa Koniec", "gradient.alpha_end", 0, 1, 0.01)}
-        `)}
-
-        ${this._renderSection("Zebra", `
-          ${this._renderColor("Kolor zebry", "zebra_color")}
-          ${this._renderNumber("Alfa zebry", "zebra_alpha", 0, 1, 0.01)}
-        `)}
-
-        ${this._renderSection("Czcionki", `
-          ${this._renderNumber("Data (rem)", "font_size.date", 0.1, 5, 0.05)}
-          ${this._renderNumber("Status (rem)", "font_size.status", 0.1, 5, 0.05)}
-          ${this._renderNumber("Drużyny (rem)", "font_size.teams", 0.1, 5, 0.05)}
-          ${this._renderNumber("Wynik (rem)", "font_size.score", 0.1, 5, 0.05)}
-        `)}
-      </ha-card>
-    `;
+  if (!customElements.get("matches-card-editor")) {
+    customElements.define("matches-card-editor", MatchesCardEditor);
   }
-}
-
-customElements.define("matches-card-editor", MatchesCardEditor);
+})();
