@@ -1,4 +1,4 @@
-// Matches Cards Pack – version 0.3.101
+// Matches Cards Pack – version 0.3.102
 // Auto-generated from dist/ folder
 
 // ========== FILE: dist/matches-card-editor.js ==========
@@ -874,7 +874,7 @@
 // ========== JSON INCLUDED: dist/hacs.json ==========
 {
   "name": "Matches Card (90minut)",
-  "filename": "matches-card.js",
+  "filename": "matches-card-pack.js",
   "content_in_root": true,
   "country": "PL",
   "homeassistant": "2023.5.0",
@@ -1556,7 +1556,7 @@ window.customCards.push({
   "render_readme": true,
   "resources": [
     {
-      "file": "matches-card.js",
+      "file": "matches-card-pack.js",
       "type": "module"
     }
   ]
