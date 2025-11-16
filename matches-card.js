@@ -1,5 +1,5 @@
 // ============================================================================
-//  Matches Card (90minut) – v0.3.000 (RESTORED BASE) + EDITOR SUPPORT
+//  Matches Card (90minut) – v0.3.000 (RESTORED BASE) + FULL EDITOR SUPPORT
 //  Author: GieOeRZet
 // ============================================================================
 
@@ -8,7 +8,7 @@ class MatchesCard extends HTMLElement {
     if (!config.entity)
       throw new Error("Entity is required (np. sensor.90minut_gornik_zabrze_matches)");
 
-    // domyślna konfiguracja bazowa 0.3.000 + nowe elementy do edytora
+    // 🔵 DOMYŚLNA KONFIG + NOWE OPCJE Z EDYTORA
     this.config = {
       name: "90minut Matches",
       show_name: true,
@@ -38,13 +38,18 @@ class MatchesCard extends HTMLElement {
       },
 
       gradient: {
-        alpha: config.gradient?.alpha ?? 0.55,
-        start: config.gradient?.start ?? 35,
-        end:   config.gradient?.end   ?? 100
+        alpha_start: typeof config.gradient?.alpha_start === "number"
+          ? config.gradient.alpha_start
+          : 0.0,
+        alpha_end: typeof config.gradient?.alpha_end === "number"
+          ? config.gradient.alpha_end
+          : (typeof config.gradient?.alpha === "number" ? config.gradient.alpha : 0.55),
+        start: typeof config.gradient?.start === "number" ? config.gradient.start : 35,
+        end:   typeof config.gradient?.end   === "number" ? config.gradient.end   : 100
       },
 
       zebra_color: config.zebra_color ?? "#f0f0f0",
-      zebra_alpha: config.zebra_alpha ?? 0.4,
+      zebra_alpha: typeof config.zebra_alpha === "number" ? config.zebra_alpha : 0.4,
 
       lite_mode: config.lite_mode ?? false,
 
@@ -62,6 +67,7 @@ class MatchesCard extends HTMLElement {
     }
     const matches = stateObj.attributes.matches || [];
 
+    // 🔵 ZEBRA CSS
     const zebraCSS =
       this.config.fill_mode === "zebra"
         ? `tr:nth-child(even){background-color:${this._rgba(this.config.zebra_color, this.config.zebra_alpha)};}`
@@ -97,8 +103,8 @@ class MatchesCard extends HTMLElement {
 
     const rows = matches.map((match) => this._renderRow(match)).join("");
 
+    // 🔵 TRYB LITE (bez ha-card, bez headera)
     if (this.config.lite_mode) {
-      // tryb LITE — bez ha-card
       this.innerHTML = `
         ${style}
         <table>${rows}</table>
@@ -137,7 +143,7 @@ class MatchesCard extends HTMLElement {
       : "";
 
     const homeTeam = this.config.full_team_names ? match.home : match.home.split(" ")[0];
-    const awayTeam = this.config.full_team_names ? match.away : match.away.split(" ")[0];
+    const awayTeam = this.config.fullergwad full_temnm ea config.fulll_team_names ? match.away : match.away.split(" ")[0];
 
     const [homeScore, awayScore] = (match.score || "-").split("-");
 
@@ -199,7 +205,7 @@ class MatchesCard extends HTMLElement {
   }
 
   // ----------------------
-  // LOGIKA TŁA ROW
+  // RGBA helper
   // ----------------------
   _rgba(hex, alpha) {
     const r = parseInt(hex.slice(1,3),16);
@@ -208,19 +214,29 @@ class MatchesCard extends HTMLElement {
     return `rgba(${r},${g},${b},${alpha})`;
   }
 
+  // ----------------------
+  // GRADIENT – pełna logika z alpha_start i alpha_end
+  // ----------------------
   _gradientCSS(result) {
     const col = this.config.colors[result] || "#000000";
-    const a = this.config.gradient.alpha;
-    const start = this.config.gradient.start;
-    const end = this.config.gradient.end;
+    const g = this.config.gradient || {};
+
+    const start = typeof g.start === "number" ? g.start : 35;
+    const end   = typeof g.end   === "number" ? g.end   : 100;
+
+    const aStart = typeof g.alpha_start === "number" ? g.alpha_start : 0.0;
+    const aEnd   = typeof g.alpha_end   === "number" ? g.alpha_end   : 0.55;
 
     return `background: linear-gradient(to right,
-      rgba(0,0,0,0) ${start}%,
-      ${this._rgba(col, a)} ${end}%);`;
+      rgba(0,0,0,0) 0%,
+      ${this._rgba(col, aStart)} ${start}%,
+      ${this._rgba(col, aEnd)} ${end}%,
+      rgba(0,0,0,0) 100%
+    );`;
   }
 
   // ----------------------
-  // IKONY LIG – tylko GitHub → fallback na tekst
+  // IKONY LIG – GitHub → tekst
   // ----------------------
   _leagueIcon(code) {
     if (!code) return null;
@@ -253,7 +269,7 @@ class MatchesCard extends HTMLElement {
 
 customElements.define("matches-card", MatchesCard);
 
-// rejestracja karty
+// rejestracja karty (wymagane przez HA)
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "matches-card",
