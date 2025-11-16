@@ -7,7 +7,7 @@
   "render_readme": true,
   "resources": [
     {
-      "file": "matches-card.js",
+      "file": "matches-card-pack.js",
       "type": "module"
     }
   ]
