@@ -1,0 +1,89 @@
+name: A Build Matches Card (single file)
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Wersja (np. 0.3.020)"
+        required: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+
+      - name: Ustaw wersję
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
+
+
+      # -------------------------------------------------------
+      # 1. SCALANIE KARTY + EDYTORA Z DIST DO ROOT
+      # -------------------------------------------------------
+      - name: Połącz kartę + edytor w jeden plik
+        run: |
+          VERSION="${{ env.VERSION }}"
+
+          # Tworzymy plik produkcyjny
+          echo "// Matches Card (90minut) – version ${VERSION}" > matches-card.js
+          echo "// Auto-generated build: karta + edytor w jednym pliku" >> matches-card.js
+          echo "" >> matches-card.js
+
+          # dołącz plik główny z dist
+          cat dist/matches-card.js >> matches-card.js
+          echo "" >> matches-card.js
+          echo "// ========== EDYTOR ========== " >> matches-card.js
+          echo "" >> matches-card.js
+
+          # dołącz plik edytora
+          cat dist/matches-card-editor.js >> matches-card.js
+
+
+      # -------------------------------------------------------
+      # 2. PRZENIESIENIE (TWORZENIE KOPII) MANIFEST + HACS
+      # -------------------------------------------------------
+      - name: Kopiuj manifest + hacs do root i ustaw wersję
+        run: |
+          VERSION="${{ env.VERSION }}"
+
+          # kopiujemy pliki do root
+          cp dist/manifest.json manifest.json
+          cp dist/hacs.json hacs.json
+
+          # aktualizujemy tylko kopię w root:
+          sed -i "s/\"version\": \".*\"/\"version\": \"${VERSION}\"/" manifest.json
+
+
+      # -------------------------------------------------------
+      # 3. COMMIT + TAG
+      # -------------------------------------------------------
+      - name: Commit zmian i utwórz tag
+        run: |
+          VERSION="${{ env.VERSION }}"
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add matches-card.js manifest.json hacs.json
+          git commit -m "Release ${VERSION}"
+          git tag -a "${VERSION}" -m "Release ${VERSION}"
+          git push origin HEAD --tags
+
+
+      # -------------------------------------------------------
+      # 4. RELEASE (bez ZIP — wszystko w root)
+      # -------------------------------------------------------
+      - name: Utwórz Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ env.VERSION }}
+          name: "Matches Card ${{ env.VERSION }}"
+          body: "Zbudowana automatycznie wersja – scalony plik karty + edytora.\nmanifest.json i hacs.json skopiowane do root."
