@@ -119,7 +119,7 @@ class MatchesCard extends HTMLElement {
 
         /* Herby: białe tło 50% + zaokrąglenia */
         .crest-box {
-          background: rgba(255,255,255,0.5);
+          background: rgba(255,255,255,1);
           border-radius: 10px;
           padding: 4px;
           display:flex;
