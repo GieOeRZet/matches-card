@@ -1,6 +1,9 @@
 // ============================================================================
 //  Matches Card (90minut) – v0.3.XXX (YAML + EDITOR SYNC, FIXED LAYOUT)
+//  - Gradient + pionowa linia jak w LeagueTableCard
+//  - Herby: białe tło 50% + zaokrąglenia
 // ============================================================================
+
 class MatchesCard extends HTMLElement {
   static get defaultConfig() {
     return {
@@ -114,9 +117,7 @@ class MatchesCard extends HTMLElement {
 
         .crest-cell { gap:4px; }
 
-        /* -----------------------------------------
-           🔥 NOWY STYL HERBÓW (białe tło 50% alfa)
-        ------------------------------------------ */
+        /* Herby: białe tło 50% + zaokrąglenia */
         .crest-box {
           background: rgba(255,255,255,0.5);
           border-radius: 10px;
@@ -253,8 +254,10 @@ class MatchesCard extends HTMLElement {
     return name.split(" ").filter(Boolean)[0];
   }
 
+  /* Gradient + pionowy pasek 3px w kolorze wyniku */
   _gradient(m) {
     if (this.config.fill_mode !== "gradient" || !m.result) return "";
+
     const c = this.config.colors[m.result];
     const g = this.config.gradient;
 
@@ -265,6 +268,7 @@ class MatchesCard extends HTMLElement {
         ${this._rgba(c, g.alpha_end)} ${g.end}%,
         rgba(0,0,0,0) 100%
       );
+      border-left: 3px solid ${c};
     `;
   }
 
