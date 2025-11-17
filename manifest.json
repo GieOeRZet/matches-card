@@ -2,7 +2,7 @@
   "domain": "matches-card",
   "name": "Matches Cards Pack (90minut)",
   "documentation": "https://github.com/GieOeRZet/matches-card",
-  "version": "0.3.105",
+  "version": "0.3.106",
   "render_readme": true,
   "type": "module",
   "frontend": true,
