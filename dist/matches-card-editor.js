@@ -1,37 +1,54 @@
 // ============================================================================
-//  Matches Card Editor – FINAL
-//  - Bez lit, czysty Web Component
-//  - Nie prze-renderuje się przy każdej zmianie (brak utraty focusa)
-//  - Sekcje <details> nie zamykają się same
-//  - Debounce ~700 ms na "config-changed"
-//  - Spięty z konfiguracją z MatchesCard.getStubConfig()
+//  Matches Card Editor – FINAL VERSION (debounce, YAML sync, no auto-close)
 // ============================================================================
 
 class MatchesCardEditor extends HTMLElement {
+
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
     this._config = {};
-    this._debounceTimer = null;
+    this._debounce = null;
   }
 
   setConfig(config) {
-    // głęboka kopia żeby nie grzebać w oryginale
-    this._config = JSON.parse(JSON.stringify(config || {}));
-    this._render();
+    // kopiujemy config aby nie modyfikować oryginału
+    this._config = JSON.parse(JSON.stringify(config));
+    this.render();
   }
 
-  // --------------------------------------
-  //  Home Assistant może to wywoływać
-  // --------------------------------------
-  set hass(_hass) {
-    // edytor nie potrzebuje hass, ale metoda musi istnieć
+  // -----------------------------------------------------
+  //  Aktualizacja wartości + debounce + wysłanie configu
+  // -----------------------------------------------------
+  _update(path, value) {
+    // ścieżki typu: "font_size.date"
+    const parts = path.split(".");
+    let ref = this._config;
+
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!ref[parts[i]]) ref[parts[i]] = {};
+      ref = ref[parts[i]];
+    }
+
+    ref[parts[parts.length - 1]] = value;
+
+    clearTimeout(this._debounce);
+    this._debounce = setTimeout(() => this._apply(), 700);
   }
 
-  // --------------------------------------
-  //  RENDER (JEDNORAZOWY, BEZ PRZE-RENDERÓW NA INPUT)
-  // --------------------------------------
-  _render() {
+  _apply() {
+    const ev = new CustomEvent("config-changed", {
+      detail: { config: this._config },
+      bubbles: true,
+      composed: true
+    });
+    this.dispatchEvent(ev);
+  }
+
+  // -----------------------------------------------------
+  //  Render
+  // -----------------------------------------------------
+  render() {
     if (!this.shadowRoot) return;
 
     const c = this._config;
@@ -44,63 +61,50 @@ class MatchesCardEditor extends HTMLElement {
           border: 1px solid rgba(255,255,255,0.15);
           overflow: hidden;
         }
-
         .group summary {
-          padding: 8px 12px;
-          font-size: 0.95rem;
+          padding: 10px 12px;
+          font-size: 1rem;
           cursor: pointer;
-          background: rgba(255,255,255,0.04);
+          background: rgba(255,255,255,0.05);
         }
-
         .group > div {
-          padding: 10px 16px 14px 16px;
+          padding: 14px;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 10px 14px;
+          gap: 12px;
         }
-
         label {
           display: flex;
           flex-direction: column;
           font-size: 0.85rem;
-          opacity: 0.9;
+          opacity: 0.85;
         }
-
-        input[type="text"],
         input[type="number"],
-        select {
-          margin-top: 4px;
+        input[type="text"] {
           padding: 4px 6px;
           border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.20);
-          background: rgba(0,0,0,0.2);
+          border: 1px solid rgba(255,255,255,0.2);
+          background: rgba(0,0,0,0.25);
           color: inherit;
-          font: inherit;
         }
-
+        select {
+          padding: 4px 6px;
+          border-radius: 6px;
+          border: 1px solid rgba(255,255,255,0.2);
+          background: rgba(0,0,0,0.25);
+          color: inherit;
+        }
         input[type="color"] {
-          margin-top: 4px;
-          width: 48px;
-          height: 28px;
+          width: 40px;
+          height: 26px;
           padding: 0;
-          border-radius: 4px;
-          border: 1px solid rgba(255,255,255,0.25);
+          border: none;
           background: transparent;
         }
-
-        .switch-row {
+        .switch {
           display: flex;
           align-items: center;
-          gap: 8px;
-          margin-top: 4px;
-        }
-
-        .switch-row span {
-          font-size: 0.9rem;
-        }
-
-        .full-width {
-          grid-column: 1 / -1;
+          gap: 10px;
         }
       </style>
 
@@ -108,420 +112,218 @@ class MatchesCardEditor extends HTMLElement {
       <details class="group" open>
         <summary>Podstawowe</summary>
         <div>
-          <label class="full-width">
+
+          <label>
             Nazwa karty
-            <input id="name" type="text">
+            <input type="text"
+                   value="${c.name ?? ""}"
+                   @input=${e => this._update("name", e.target.value)}>
           </label>
 
-          <label class="full-width">
-            <div class="switch-row">
-              <ha-switch id="show_name"></ha-switch>
-              <span>Pokaż nagłówek (ha-card header)</span>
-            </div>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.show_logos !== false}"
+              @change=${e => this._update("show_logos", e.target.checked)}>
+            </ha-switch>
+            Pokaż herby
           </label>
 
-          <label class="full-width">
-            <div class="switch-row">
-              <ha-switch id="show_logos"></ha-switch>
-              <span>Pokaż herby</span>
-            </div>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.full_team_names !== false}"
+              @change=${e => this._update("full_team_names", e.target.checked)}>
+            </ha-switch>
+            Pełne nazwy drużyn
           </label>
 
-          <label class="full-width">
-            <div class="switch-row">
-              <ha-switch id="full_team_names"></ha-switch>
-              <span>Pełne nazwy drużyn (zamiast skróconych)</span>
-            </div>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.show_result_symbols !== false}"
+              @change=${e => this._update("show_result_symbols", e.target.checked)}>
+            </ha-switch>
+            Pokaż W/D/L
           </label>
 
-          <label class="full-width">
-            <div class="switch-row">
-              <ha-switch id="show_result_symbols"></ha-switch>
-              <span>Pokaż symbole W / D / L</span>
-            </div>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.lite_mode === true}"
+              @change=${e => this._update("lite_mode", e.target.checked)}>
+            </ha-switch>
+            Tryb LITE
           </label>
 
-          <label class="full-width">
-            <div class="switch-row">
-              <ha-switch id="lite_mode"></ha-switch>
-              <span>Tryb LITE (bez tła ha-card)</span>
-            </div>
-          </label>
         </div>
       </details>
 
-      <!-- WYPEŁNIENIE -->
+      <!-- FILL MODE -->
       <details class="group" open>
-        <summary>Wypełnienie tła wiersza</summary>
+        <summary>Styl wypełnienia</summary>
         <div>
+
           <label>
-            Tryb wypełnienia
-            <select id="fill_mode">
-              <option value="gradient">Gradient (kolor zależny od wyniku)</option>
-              <option value="zebra">Zebra</option>
-              <option value="clear">Brak</option>
+            Tryb
+            <select @change=${e => this._update("fill_mode", e.target.value)}>
+              <option value="gradient" ${c.fill_mode === "gradient" ? "selected" : ""}>Gradient</option>
+              <option value="zebra"    ${c.fill_mode === "zebra" ? "selected" : ""}>Zebra</option>
+              <option value="clear"    ${c.fill_mode === "clear" ? "selected" : ""}>Brak</option>
             </select>
           </label>
 
-          <label>
-            Kolor zebry
-            <input id="zebra_color" type="color">
-          </label>
+          ${
+            c.fill_mode === "gradient"
+            ? `
+              <label>
+                Start (%)
+                <input type="number" min="0" max="100"
+                       value="${c.gradient?.start ?? 35}"
+                       @input=${e => this._update("gradient.start", Number(e.target.value))}>
+              </label>
 
-          <label>
-            Alfa zebry
-            <input id="zebra_alpha" type="number" min="0" max="1" step="0.05">
-          </label>
+              <label>
+                Koniec (%)
+                <input type="number" min="0" max="100"
+                       value="${c.gradient?.end ?? 100}"
+                       @input=${e => this._update("gradient.end", Number(e.target.value))}>
+              </label>
 
-          <label>
-            Gradient – start (%)
-            <input id="grad_start" type="number" min="0" max="100" step="1">
-          </label>
+              <label>
+                Alfa start
+                <input type="number" min="0" max="1" step="0.05"
+                       value="${c.gradient?.alpha_start ?? 0}"
+                       @input=${e => this._update("gradient.alpha_start", Number(e.target.value))}>
+              </label>
 
-          <label>
-            Gradient – koniec (%)
-            <input id="grad_end" type="number" min="0" max="100" step="1">
-          </label>
+              <label>
+                Alfa koniec
+                <input type="number" min="0" max="1" step="0.05"
+                       value="${c.gradient?.alpha_end ?? 0.55}"
+                       @input=${e => this._update("gradient.alpha_end", Number(e.target.value))}>
+              </label>
+            `
+            : ""
+          }
 
-          <label>
-            Gradient – alfa start
-            <input id="grad_alpha_start" type="number" min="0" max="1" step="0.05">
-          </label>
+          ${
+            c.fill_mode === "zebra"
+            ? `
+              <label>
+                Kolor zebry
+                <input type="color"
+                       value="${c.zebra_color ?? "#f0f0f0"}"
+                       @input=${e => this._update("zebra_color", e.target.value)}>
+              </label>
 
-          <label>
-            Gradient – alfa koniec
-            <input id="grad_alpha_end" type="number" min="0" max="1" step="0.05">
-          </label>
+              <label>
+                Alfa zebry
+                <input type="number" min="0" max="1" step="0.05"
+                       value="${c.zebra_alpha ?? 0.4}"
+                       @input=${e => this._update("zebra_alpha", Number(e.target.value))}>
+              </label>
+            `
+            : ""
+          }
+
         </div>
       </details>
 
       <!-- CZCIONKI -->
-      <details class="group" open>
+      <details class="group">
         <summary>Rozmiary czcionek</summary>
         <div>
+
           <label>
             Data
-            <input id="font_date" type="number" step="0.1">
+            <input type="number" step="0.1"
+                   value="${c.font_size?.date ?? 0.9}"
+                   @input=${e => this._update("font_size.date", Number(e.target.value))}>
           </label>
 
           <label>
             Status (KONIEC / godzina)
-            <input id="font_status" type="number" step="0.1">
+            <input type="number" step="0.1"
+                   value="${c.font_size?.status ?? 0.8}"
+                   @input=${e => this._update("font_size.status", Number(e.target.value))}>
           </label>
 
           <label>
             Drużyny
-            <input id="font_teams" type="number" step="0.1">
+            <input type="number" step="0.1"
+                   value="${c.font_size?.teams ?? 1.0}"
+                   @input=${e => this._update("font_size.teams", Number(e.target.value))}>
           </label>
 
           <label>
             Wynik
-            <input id="font_score" type="number" step="0.1">
+            <input type="number" step="0.1"
+                   value="${c.font_size?.score ?? 1.0}"
+                   @input=${e => this._update("font_size.score", Number(e.target.value))}>
           </label>
+
         </div>
       </details>
 
-      <!-- IKONY -->
-      <details class="group" open>
+      <!-- ROZMIARY IKON -->
+      <details class="group">
         <summary>Rozmiary ikon</summary>
         <div>
+
           <label>
-            Logo ligi
-            <input id="icon_league" type="number" min="10" max="80" step="1">
+            Liga
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.league ?? 26}"
+                   @input=${e => this._update("icon_size.league", Number(e.target.value))}>
           </label>
 
           <label>
             Herby
-            <input id="icon_crest" type="number" min="10" max="80" step="1">
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.crest ?? 24}"
+                   @input=${e => this._update("icon_size.crest", Number(e.target.value))}>
           </label>
 
           <label>
-            Symbol W / D / L
-            <input id="icon_result" type="number" min="10" max="80" step="1">
+            W/D/L
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.result ?? 26}"
+                   @input=${e => this._update("icon_size.result", Number(e.target.value))}>
           </label>
+
         </div>
       </details>
 
       <!-- KOLORY W/D/L -->
-      <details class="group" open>
-        <summary>Kolory wyników</summary>
+      <details class="group">
+        <summary>Kolory W / D / L</summary>
         <div>
+
           <label>
             Wygrana (W)
-            <input id="color_win" type="color">
+            <input type="color"
+                   value="${c.colors?.win ?? "#3ba55d"}"
+                   @input=${e => this._update("colors.win", e.target.value)}>
           </label>
 
           <label>
             Remis (D)
-            <input id="color_draw" type="color">
+            <input type="color"
+                   value="${c.colors?.draw ?? "#468cd2"}"
+                   @input=${e => this._update("colors.draw", e.target.value)}>
           </label>
 
           <label>
             Porażka (L)
-            <input id="color_loss" type="color">
+            <input type="color"
+                   value="${c.colors?.loss ?? "#e23b3b"}"
+                   @input=${e => this._update("colors.loss", e.target.value)}>
           </label>
+
         </div>
       </details>
     `;
-
-    this._bindValues();
-    this._bindEvents();
   }
 
-  // --------------------------------------
-  //  WSTAWIENIE WARTOŚCI Z CONFIG DO INPUTÓW
-  // --------------------------------------
-  _bindValues() {
-    const root = this.shadowRoot;
-    const c = this._config;
-
-    // Podstawowe
-    root.getElementById("name").value = c.name ?? "";
-
-    const showName = root.getElementById("show_name");
-    showName.checked = c.show_name !== false;
-
-    const showLogos = root.getElementById("show_logos");
-    showLogos.checked = c.show_logos !== false;
-
-    const fullTeamNames = root.getElementById("full_team_names");
-    fullTeamNames.checked = c.full_team_names !== false;
-
-    const showResultSymbols = root.getElementById("show_result_symbols");
-    showResultSymbols.checked = c.show_result_symbols !== false;
-
-    const liteMode = root.getElementById("lite_mode");
-    liteMode.checked = c.lite_mode === true;
-
-    // Wypełnienie
-    root.getElementById("fill_mode").value = c.fill_mode || "gradient";
-
-    root.getElementById("zebra_color").value = c.zebra_color || "#f0f0f0";
-    root.getElementById("zebra_alpha").value =
-      typeof c.zebra_alpha === "number" ? c.zebra_alpha : 0.4;
-
-    const grad = c.gradient || {};
-    root.getElementById("grad_start").value =
-      typeof grad.start === "number" ? grad.start : 35;
-    root.getElementById("grad_end").value =
-      typeof grad.end === "number" ? grad.end : 100;
-    root.getElementById("grad_alpha_start").value =
-      typeof grad.alpha_start === "number" ? grad.alpha_start : 0.0;
-    root.getElementById("grad_alpha_end").value =
-      typeof grad.alpha_end === "number" ? grad.alpha_end : 0.55;
-
-    // Czcionki
-    const fs = c.font_size || {};
-    root.getElementById("font_date").value =
-      typeof fs.date === "number" ? fs.date : 0.9;
-    root.getElementById("font_status").value =
-      typeof fs.status === "number" ? fs.status : 0.8;
-    root.getElementById("font_teams").value =
-      typeof fs.teams === "number" ? fs.teams : 1.0;
-    root.getElementById("font_score").value =
-      typeof fs.score === "number" ? fs.score : 1.0;
-
-    // Ikony
-    const isz = c.icon_size || {};
-    root.getElementById("icon_league").value =
-      typeof isz.league === "number" ? isz.league : 26;
-    root.getElementById("icon_crest").value =
-      typeof isz.crest === "number" ? isz.crest : 24;
-    root.getElementById("icon_result").value =
-      typeof isz.result === "number" ? isz.result : 26;
-
-    // Kolory W/D/L
-    const col = c.colors || {};
-    root.getElementById("color_win").value = col.win || "#3ba55d";
-    root.getElementById("color_draw").value = col.draw || "#468cd2";
-    root.getElementById("color_loss").value = col.loss || "#e23b3b";
-  }
-
-  // --------------------------------------
-  //  PODPIĘCIE ZDARZEŃ
-  // --------------------------------------
-  _bindEvents() {
-    const root = this.shadowRoot;
-
-    // Tekst: nazwa
-    root.getElementById("name").addEventListener("input", (ev) => {
-      this._config.name = ev.target.value;
-      this._scheduleUpdate();
-    });
-
-    // Switche
-    root.getElementById("show_name").addEventListener("change", (ev) => {
-      this._config.show_name = ev.target.checked;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("show_logos").addEventListener("change", (ev) => {
-      this._config.show_logos = ev.target.checked;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("full_team_names").addEventListener("change", (ev) => {
-      this._config.full_team_names = ev.target.checked;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("show_result_symbols").addEventListener("change", (ev) => {
-      this._config.show_result_symbols = ev.target.checked;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("lite_mode").addEventListener("change", (ev) => {
-      this._config.lite_mode = ev.target.checked;
-      this._scheduleUpdate();
-    });
-
-    // Tryb wypełnienia
-    root.getElementById("fill_mode").addEventListener("change", (ev) => {
-      this._config.fill_mode = ev.target.value;
-      this._scheduleUpdate();
-    });
-
-    // Zebra
-    root.getElementById("zebra_color").addEventListener("input", (ev) => {
-      this._config.zebra_color = ev.target.value;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("zebra_alpha").addEventListener("input", (ev) => {
-      const val = parseFloat(ev.target.value);
-      if (!this._config) this._config = {};
-      this._config.zebra_alpha = isNaN(val) ? 0.4 : val;
-      this._scheduleUpdate();
-    });
-
-    // Gradient
-    root.getElementById("grad_start").addEventListener("input", (ev) => {
-      const val = parseInt(ev.target.value, 10);
-      this._ensurePath("gradient");
-      this._config.gradient.start = isNaN(val) ? 35 : val;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("grad_end").addEventListener("input", (ev) => {
-      const val = parseInt(ev.target.value, 10);
-      this._ensurePath("gradient");
-      this._config.gradient.end = isNaN(val) ? 100 : val;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("grad_alpha_start").addEventListener("input", (ev) => {
-      const val = parseFloat(ev.target.value);
-      this._ensurePath("gradient");
-      this._config.gradient.alpha_start = isNaN(val) ? 0.0 : val;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("grad_alpha_end").addEventListener("input", (ev) => {
-      const val = parseFloat(ev.target.value);
-      this._ensurePath("gradient");
-      this._config.gradient.alpha_end = isNaN(val) ? 0.55 : val;
-      this._scheduleUpdate();
-    });
-
-    // Czcionki
-    root.getElementById("font_date").addEventListener("input", (ev) => {
-      const val = parseFloat(ev.target.value);
-      this._ensurePath("font_size");
-      this._config.font_size.date = isNaN(val) ? 0.9 : val;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("font_status").addEventListener("input", (ev) => {
-      const val = parseFloat(ev.target.value);
-      this._ensurePath("font_size");
-      this._config.font_size.status = isNaN(val) ? 0.8 : val;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("font_teams").addEventListener("input", (ev) => {
-      const val = parseFloat(ev.target.value);
-      this._ensurePath("font_size");
-      this._config.font_size.teams = isNaN(val) ? 1.0 : val;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("font_score").addEventListener("input", (ev) => {
-      const val = parseFloat(ev.target.value);
-      this._ensurePath("font_size");
-      this._config.font_size.score = isNaN(val) ? 1.0 : val;
-      this._scheduleUpdate();
-    });
-
-    // Ikony
-    root.getElementById("icon_league").addEventListener("input", (ev) => {
-      const val = parseInt(ev.target.value, 10);
-      this._ensurePath("icon_size");
-      this._config.icon_size.league = isNaN(val) ? 26 : val;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("icon_crest").addEventListener("input", (ev) => {
-      const val = parseInt(ev.target.value, 10);
-      this._ensurePath("icon_size");
-      this._config.icon_size.crest = isNaN(val) ? 24 : val;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("icon_result").addEventListener("input", (ev) => {
-      const val = parseInt(ev.target.value, 10);
-      this._ensurePath("icon_size");
-      this._config.icon_size.result = isNaN(val) ? 26 : val;
-      this._scheduleUpdate();
-    });
-
-    // Kolory W/D/L
-    root.getElementById("color_win").addEventListener("input", (ev) => {
-      this._ensurePath("colors");
-      this._config.colors.win = ev.target.value;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("color_draw").addEventListener("input", (ev) => {
-      this._ensurePath("colors");
-      this._config.colors.draw = ev.target.value;
-      this._scheduleUpdate();
-    });
-
-    root.getElementById("color_loss").addEventListener("input", (ev) => {
-      this._ensurePath("colors");
-      this._config.colors.loss = ev.target.value;
-      this._scheduleUpdate();
-    });
-  }
-
-  _ensurePath(key) {
-    if (!this._config[key] || typeof this._config[key] !== "object") {
-      this._config[key] = {};
-    }
-  }
-
-  // --------------------------------------
-  //  DEBOUNCE + EMIT CONFIG
-  // --------------------------------------
-  _scheduleUpdate() {
-    if (this._debounceTimer) clearTimeout(this._debounceTimer);
-    this._debounceTimer = setTimeout(() => this._emitConfigChanged(), 700);
-  }
-
-  _emitConfigChanged() {
-    const event = new CustomEvent("config-changed", {
-      detail: { config: this._config },
-      bubbles: true,
-      composed: true,
-    });
-    this.dispatchEvent(event);
-  }
-
-  // wymagane przez HA (nie musi nic zwracać konkretnego)
-  static get stubConfig() {
-    return {
-      entity: "sensor.90minut_gornik_zabrze_matches"
-    };
+  static get styles() {
+    return window.HAUIUtils?.styles ?? "";
   }
 }
 
