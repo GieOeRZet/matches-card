@@ -1,9 +1,8 @@
 // ============================================================================
-//  Matches Card Editor – FINAL VERSION (debounce, YAML sync, no auto-close)
+//  Matches Card Editor – YAML sync, debounce, pełna konfiguracja
 // ============================================================================
 
 class MatchesCardEditor extends HTMLElement {
-
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -11,320 +10,309 @@ class MatchesCardEditor extends HTMLElement {
     this._debounce = null;
   }
 
-  setConfig(config) {
-    // kopiujemy config aby nie modyfikować oryginału
-    this._config = JSON.parse(JSON.stringify(config));
-    this.render();
+  static get defaultConfig() {
+    return {
+      name: "90minut Matches",
+      show_name: true,
+      show_logos: true,
+      full_team_names: true,
+      show_result_symbols: true,
+
+      fill_mode: "gradient",
+
+      font_size: {
+        date: 0.9,
+        status: 0.8,
+        teams: 1.0,
+        score: 1.0,
+      },
+
+      icon_size: {
+        league: 26,
+        crest: 24,
+        result: 26,
+      },
+
+      colors: {
+        win: "#3ba55d",
+        draw: "#468cd2",
+        loss: "#e23b3b",
+      },
+
+      gradient: {
+        start: 35,
+        end: 100,
+        alpha_start: 0.0,
+        alpha_end: 0.55,
+      },
+
+      zebra_color: "#f0f0f0",
+      zebra_alpha: 0.4,
+
+      lite_mode: false,
+    };
   }
 
-  // -----------------------------------------------------
-  //  Aktualizacja wartości + debounce + wysłanie configu
-  // -----------------------------------------------------
-  _update(path, value) {
-    // ścieżki typu: "font_size.date"
+  // głębokie łączenie
+  _mergeDeep(base, extra) {
+    const out = {};
+    const keys = new Set([...Object.keys(base), ...Object.keys(extra || {})]);
+    keys.forEach((k) => {
+      const bv = base[k];
+      const ev = extra ? extra[k] : undefined;
+      if (typeof bv === "object" && !Array.isArray(bv)) {
+        out[k] = this._mergeDeep(bv, ev || {});
+      } else {
+        out[k] = ev !== undefined ? ev : bv;
+      }
+    });
+    return out;
+  }
+
+  setConfig(config) {
+    const merged = this._mergeDeep(MatchesCardEditor.defaultConfig, config || {});
+    if (config && config.entity) merged.entity = config.entity;
+    this._config = merged;
+    this._render();
+  }
+
+  // helper pobierania wartości
+  _getPath(path) {
+    return path.split(".").reduce((o, k) => (o ? o[k] : undefined), this._config);
+  }
+
+  // helper ustawiania wartości
+  _updatePath(path, value) {
+    const obj = JSON.parse(JSON.stringify(this._config));
     const parts = path.split(".");
-    let ref = this._config;
+    let ref = obj;
 
     for (let i = 0; i < parts.length - 1; i++) {
-      if (!ref[parts[i]]) ref[parts[i]] = {};
+      if (!ref[parts[i]] || typeof ref[parts[i]] !== "object") {
+        ref[parts[i]] = {};
+      }
       ref = ref[parts[i]];
     }
-
     ref[parts[parts.length - 1]] = value;
 
+    this._config = obj;
+
     clearTimeout(this._debounce);
-    this._debounce = setTimeout(() => this._apply(), 700);
+    this._debounce = setTimeout(() => {
+      this.dispatchEvent(
+        new CustomEvent("config-changed", {
+          detail: { config: this._config },
+          bubbles: true,
+          composed: true,
+        })
+      );
+    }, 700);
   }
 
-  _apply() {
-    const ev = new CustomEvent("config-changed", {
-      detail: { config: this._config },
-      bubbles: true,
-      composed: true
-    });
-    this.dispatchEvent(ev);
-  }
-
-  // -----------------------------------------------------
-  //  Render
-  // -----------------------------------------------------
-  render() {
-    if (!this.shadowRoot) return;
-
+  // ------------------------------
+  // render
+  // ------------------------------
+  _render() {
     const c = this._config;
+    const root = this.shadowRoot;
 
-    this.shadowRoot.innerHTML = `
+    const prev = {
+      basic: root.querySelector("#basic")?.open ?? true,
+      fill: root.querySelector("#fill")?.open ?? false,
+      fonts: root.querySelector("#fonts")?.open ?? false,
+      icons: root.querySelector("#icons")?.open ?? false,
+      colors: root.querySelector("#colors")?.open ?? false,
+    };
+
+    root.innerHTML = `
       <style>
-        .group {
-          margin: 12px 0;
-          border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.15);
-          overflow: hidden;
+        .group{margin:12px 0;border:1px solid rgba(255,255,255,0.1);border-radius:8px;}
+        .group summary{padding:10px 12px;background:rgba(255,255,255,0.05);cursor:pointer;}
+        .group div{padding:10px 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+        label{display:flex;flex-direction:column;font-size:0.9rem;}
+        input[type="text"],input[type="number"],select{
+          padding:6px;background:#0003;border:1px solid #fff2;border-radius:6px;color:inherit;
         }
-        .group summary {
-          padding: 10px 12px;
-          font-size: 1rem;
-          cursor: pointer;
-          background: rgba(255,255,255,0.05);
-        }
-        .group > div {
-          padding: 14px;
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
-        }
-        label {
-          display: flex;
-          flex-direction: column;
-          font-size: 0.85rem;
-          opacity: 0.85;
-        }
-        input[type="number"],
-        input[type="text"] {
-          padding: 4px 6px;
-          border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.2);
-          background: rgba(0,0,0,0.25);
-          color: inherit;
-        }
-        select {
-          padding: 4px 6px;
-          border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.2);
-          background: rgba(0,0,0,0.25);
-          color: inherit;
-        }
-        input[type="color"] {
-          width: 40px;
-          height: 26px;
-          padding: 0;
-          border: none;
-          background: transparent;
-        }
-        .switch {
-          display: flex;
-          align-items: center;
-          gap: 10px;
-        }
+        input[type="color"]{width:40px;height:26px;border:none;background:transparent;}
+        .row{display:flex;align-items:center;gap:10px;}
       </style>
 
       <!-- PODSTAWOWE -->
-      <details class="group" open>
+      <details id="basic" class="group" ${prev.basic ? "open" : ""}>
         <summary>Podstawowe</summary>
         <div>
-
-          <label>
-            Nazwa karty
-            <input type="text"
-                   value="${c.name ?? ""}"
-                   @input=${e => this._update("name", e.target.value)}>
+          <label>Nazwa karty
+            <input type="text" data-path="name" value="${c.name}">
           </label>
 
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.show_logos !== false}"
-              @change=${e => this._update("show_logos", e.target.checked)}>
-            </ha-switch>
-            Pokaż herby
-          </label>
+          <div class="row">
+            <span>Pokaż herby</span>
+            <ha-switch data-path="show_logos"></ha-switch>
+          </div>
 
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.full_team_names !== false}"
-              @change=${e => this._update("full_team_names", e.target.checked)}>
-            </ha-switch>
-            Pełne nazwy drużyn
-          </label>
+          <div class="row">
+            <span>Pełne nazwy</span>
+            <ha-switch data-path="full_team_names"></ha-switch>
+          </div>
 
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.show_result_symbols !== false}"
-              @change=${e => this._update("show_result_symbols", e.target.checked)}>
-            </ha-switch>
-            Pokaż W/D/L
-          </label>
+          <div class="row">
+            <span>Pokaż W/D/L</span>
+            <ha-switch data-path="show_result_symbols"></ha-switch>
+          </div>
 
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.lite_mode === true}"
-              @change=${e => this._update("lite_mode", e.target.checked)}>
-            </ha-switch>
-            Tryb LITE
-          </label>
-
+          <div class="row">
+            <span>Tryb LITE</span>
+            <ha-switch data-path="lite_mode"></ha-switch>
+          </div>
         </div>
       </details>
 
-      <!-- FILL MODE -->
-      <details class="group" open>
+      <!-- STYL -->
+      <details id="fill" class="group" ${prev.fill ? "open" : ""}>
         <summary>Styl wypełnienia</summary>
         <div>
-
-          <label>
-            Tryb
-            <select @change=${e => this._update("fill_mode", e.target.value)}>
+          <label>Tryb
+            <select data-path="fill_mode">
               <option value="gradient" ${c.fill_mode === "gradient" ? "selected" : ""}>Gradient</option>
-              <option value="zebra"    ${c.fill_mode === "zebra" ? "selected" : ""}>Zebra</option>
-              <option value="clear"    ${c.fill_mode === "clear" ? "selected" : ""}>Brak</option>
+              <option value="zebra" ${c.fill_mode === "zebra" ? "selected" : ""}>Zebra</option>
+              <option value="clear" ${c.fill_mode === "clear" ? "selected" : ""}>Brak</option>
             </select>
           </label>
 
           ${
             c.fill_mode === "gradient"
-            ? `
-              <label>
-                Start (%)
-                <input type="number" min="0" max="100"
-                       value="${c.gradient?.start ?? 35}"
-                       @input=${e => this._update("gradient.start", Number(e.target.value))}>
-              </label>
+              ? `
+            <label>Start %
+              <input type="number" data-type="number" data-path="gradient.start" value="${c.gradient.start}">
+            </label>
 
-              <label>
-                Koniec (%)
-                <input type="number" min="0" max="100"
-                       value="${c.gradient?.end ?? 100}"
-                       @input=${e => this._update("gradient.end", Number(e.target.value))}>
-              </label>
+            <label>Koniec %
+              <input type="number" data-type="number" data-path="gradient.end" value="${c.gradient.end}">
+            </label>
 
-              <label>
-                Alfa start
-                <input type="number" min="0" max="1" step="0.05"
-                       value="${c.gradient?.alpha_start ?? 0}"
-                       @input=${e => this._update("gradient.alpha_start", Number(e.target.value))}>
-              </label>
+            <label>Alfa start
+              <input type="number" data-type="number" step="0.05" data-path="gradient.alpha_start" value="${c.gradient.alpha_start}">
+            </label>
 
-              <label>
-                Alfa koniec
-                <input type="number" min="0" max="1" step="0.05"
-                       value="${c.gradient?.alpha_end ?? 0.55}"
-                       @input=${e => this._update("gradient.alpha_end", Number(e.target.value))}>
-              </label>
-            `
-            : ""
+            <label>Alfa koniec
+              <input type="number" data-type="number" step="0.05" data-path="gradient.alpha_end" value="${c.gradient.alpha_end}">
+            </label>
+          `
+              : ""
           }
 
           ${
             c.fill_mode === "zebra"
-            ? `
-              <label>
-                Kolor zebry
-                <input type="color"
-                       value="${c.zebra_color ?? "#f0f0f0"}"
-                       @input=${e => this._update("zebra_color", e.target.value)}>
-              </label>
+              ? `
+            <label>Kolor zebry
+              <input type="color" data-path="zebra_color" value="${c.zebra_color}">
+            </label>
 
-              <label>
-                Alfa zebry
-                <input type="number" min="0" max="1" step="0.05"
-                       value="${c.zebra_alpha ?? 0.4}"
-                       @input=${e => this._update("zebra_alpha", Number(e.target.value))}>
-              </label>
-            `
-            : ""
+            <label>Alfa
+              <input type="number" data-type="number" step="0.05" data-path="zebra_alpha" value="${c.zebra_alpha}">
+            </label>
+          `
+              : ""
           }
-
         </div>
       </details>
 
       <!-- CZCIONKI -->
-      <details class="group">
+      <details id="fonts" class="group" ${prev.fonts ? "open" : ""}>
         <summary>Rozmiary czcionek</summary>
         <div>
-
-          <label>
-            Data
-            <input type="number" step="0.1"
-                   value="${c.font_size?.date ?? 0.9}"
-                   @input=${e => this._update("font_size.date", Number(e.target.value))}>
+          <label>Data
+            <input type="number" step="0.1" data-path="font_size.date" data-type="number" value="${c.font_size.date}">
           </label>
-
-          <label>
-            Status (KONIEC / godzina)
-            <input type="number" step="0.1"
-                   value="${c.font_size?.status ?? 0.8}"
-                   @input=${e => this._update("font_size.status", Number(e.target.value))}>
+          <label>Status / godzina
+            <input type="number" step="0.1" data-path="font_size.status" data-type="number" value="${c.font_size.status}">
           </label>
-
-          <label>
-            Drużyny
-            <input type="number" step="0.1"
-                   value="${c.font_size?.teams ?? 1.0}"
-                   @input=${e => this._update("font_size.teams", Number(e.target.value))}>
+          <label>Drużyny
+            <input type="number" step="0.1" data-path="font_size.teams" data-type="number" value="${c.font_size.teams}">
           </label>
-
-          <label>
-            Wynik
-            <input type="number" step="0.1"
-                   value="${c.font_size?.score ?? 1.0}"
-                   @input=${e => this._update("font_size.score", Number(e.target.value))}>
+          <label>Wynik
+            <input type="number" step="0.1" data-path="font_size.score" data-type="number" value="${c.font_size.score}">
           </label>
-
         </div>
       </details>
 
-      <!-- ROZMIARY IKON -->
-      <details class="group">
+      <!-- IKONY -->
+      <details id="icons" class="group" ${prev.icons ? "open" : ""}>
         <summary>Rozmiary ikon</summary>
         <div>
-
-          <label>
-            Liga
-            <input type="number" min="10" max="60"
-                   value="${c.icon_size?.league ?? 26}"
-                   @input=${e => this._update("icon_size.league", Number(e.target.value))}>
+          <label>Liga
+            <input type="number" data-path="icon_size.league" data-type="number" value="${c.icon_size.league}">
           </label>
-
-          <label>
-            Herby
-            <input type="number" min="10" max="60"
-                   value="${c.icon_size?.crest ?? 24}"
-                   @input=${e => this._update("icon_size.crest", Number(e.target.value))}>
+          <label>Herby
+            <input type="number" data-path="icon_size.crest" data-type="number" value="${c.icon_size.crest}">
           </label>
-
-          <label>
-            W/D/L
-            <input type="number" min="10" max="60"
-                   value="${c.icon_size?.result ?? 26}"
-                   @input=${e => this._update("icon_size.result", Number(e.target.value))}>
+          <label>W/D/L
+            <input type="number" data-path="icon_size.result" data-type="number" value="${c.icon_size.result}">
           </label>
-
         </div>
       </details>
 
-      <!-- KOLORY W/D/L -->
-      <details class="group">
-        <summary>Kolory W / D / L</summary>
+      <!-- KOLORY -->
+      <details id="colors" class="group" ${prev.colors ? "open" : ""}>
+        <summary>Kolory W/D/L</summary>
         <div>
-
-          <label>
-            Wygrana (W)
-            <input type="color"
-                   value="${c.colors?.win ?? "#3ba55d"}"
-                   @input=${e => this._update("colors.win", e.target.value)}>
+          <label>Wygrana
+            <input type="color" data-path="colors.win" value="${c.colors.win}">
           </label>
-
-          <label>
-            Remis (D)
-            <input type="color"
-                   value="${c.colors?.draw ?? "#468cd2"}"
-                   @input=${e => this._update("colors.draw", e.target.value)}>
+          <label>Remis
+            <input type="color" data-path="colors.draw" value="${c.colors.draw}">
           </label>
-
-          <label>
-            Porażka (L)
-            <input type="color"
-                   value="${c.colors?.loss ?? "#e23b3b"}"
-                   @input=${e => this._update("colors.loss", e.target.value)}>
+          <label>Porażka
+            <input type="color" data-path="colors.loss" value="${c.colors.loss}">
           </label>
-
         </div>
       </details>
     `;
+
+    this._attachEvents();
   }
 
-  static get styles() {
-    return window.HAUIUtils?.styles ?? "";
+  // ------------------------------
+  // eventy
+  // ------------------------------
+  _attachEvents() {
+    const root = this.shadowRoot;
+
+    // inputy
+    root.querySelectorAll("input[data-path]").forEach((el) => {
+      const path = el.getAttribute("data-path");
+      const type = el.getAttribute("data-type");
+
+      el.addEventListener("input", (ev) => {
+        let v = ev.target.value;
+        if (type === "number") v = Number(v);
+        this._updatePath(path, v);
+      });
+    });
+
+    // select
+    root.querySelectorAll("select[data-path]").forEach((sel) => {
+      sel.addEventListener("change", (ev) => {
+        this._updatePath(sel.getAttribute("data-path"), ev.target.value);
+        this._render(); // przeładować sekcję odpowiednią
+      });
+    });
+
+    // ha-switch
+    root.querySelectorAll("ha-switch[data-path]").forEach((sw) => {
+      const path = sw.getAttribute("data-path");
+      sw.checked = !!this._getPath(path);
+      sw.addEventListener("change", (ev) => {
+        this._updatePath(path, ev.target.checked);
+      });
+    });
+  }
+
+  set hass(hass) {
+    this._hass = hass;
   }
 }
 
-customElements.define("matches-card-editor", MatchesCardEditor);
+if (!customElements.get("matches-card-editor")) {
+  customElements.define("matches-card-editor", MatchesCardEditor);
+}
