@@ -1,4 +1,4 @@
-// Matches Cards Pack – version 0.3.201
+// Matches Cards Pack – version 0.3.202
 // Auto-generated from dist/
 
 // ===== FILE INCLUDED: dist/league-table-card-editor.js =====
@@ -832,7 +832,7 @@ window.customCards.push({
 });
 // ===== FILE INCLUDED: dist/matches-card-editor.js =====
 // ============================================================================
-//  Matches Card Editor – YAML sync, debounce, pełna konfiguracja
+//  Matches Card Editor – YAML sync, debounce, pełna konfiguracja + PREMIUM
 // ============================================================================
 
 class MatchesCardEditor extends HTMLElement {
@@ -851,7 +851,7 @@ class MatchesCardEditor extends HTMLElement {
       full_team_names: true,
       show_result_symbols: true,
 
-      fill_mode: "gradient",
+      fill_mode: "gradient", // gradient | premium | zebra | clear
 
       font_size: {
         date: 0.9,
@@ -879,6 +879,14 @@ class MatchesCardEditor extends HTMLElement {
         alpha_end: 0.55,
       },
 
+      // PREMIUM GRADIENT – ustawienia domyślne (soft)
+      premium: {
+        start_alpha: 0.85,
+        mid_alpha: 0.35,
+        end_alpha: 0.0,
+        pastel_pos: 15,
+      },
+
       zebra_color: "#f0f0f0",
       zebra_alpha: 0.4,
 
@@ -889,21 +897,39 @@ class MatchesCardEditor extends HTMLElement {
   // głębokie łączenie
   _mergeDeep(base, extra) {
     const out = {};
-    const keys = new Set([...Object.keys(base), ...Object.keys(extra || {})]);
+    const keys = new Set([
+      ...Object.keys(base || {}),
+      ...Object.keys(extra || {}),
+    ]);
+
     keys.forEach((k) => {
-      const bv = base[k];
+      const bv = base ? base[k] : undefined;
       const ev = extra ? extra[k] : undefined;
-      if (typeof bv === "object" && !Array.isArray(bv)) {
-        out[k] = this._mergeDeep(bv, ev || {});
+
+      if (
+        bv &&
+        typeof bv === "object" &&
+        !Array.isArray(bv) &&
+        ev &&
+        typeof ev === "object" &&
+        !Array.isArray(ev)
+      ) {
+        out[k] = this._mergeDeep(bv, ev);
+      } else if (ev !== undefined) {
+        out[k] = ev;
       } else {
-        out[k] = ev !== undefined ? ev : bv;
+        out[k] = bv;
       }
     });
+
     return out;
   }
 
   setConfig(config) {
-    const merged = this._mergeDeep(MatchesCardEditor.defaultConfig, config || {});
+    const merged = this._mergeDeep(
+      MatchesCardEditor.defaultConfig,
+      config || {}
+    );
     if (config && config.entity) merged.entity = config.entity;
     this._config = merged;
     this._render();
@@ -911,7 +937,9 @@ class MatchesCardEditor extends HTMLElement {
 
   // helper pobierania wartości
   _getPath(path) {
-    return path.split(".").reduce((o, k) => (o ? o[k] : undefined), this._config);
+    return path
+      .split(".")
+      .reduce((o, k) => (o ? o[k] : undefined), this._config);
   }
 
   // helper ustawiania wartości
@@ -959,15 +987,47 @@ class MatchesCardEditor extends HTMLElement {
 
     root.innerHTML = `
       <style>
-        .group{margin:12px 0;border:1px solid rgba(255,255,255,0.1);border-radius:8px;}
-        .group summary{padding:10px 12px;background:rgba(255,255,255,0.05);cursor:pointer;}
-        .group div{padding:10px 16px 16px;display:grid;grid-template-columns:1fr 1fr;gap:12px;}
-        label{display:flex;flex-direction:column;font-size:0.9rem;}
-        input[type="text"],input[type="number"],select{
-          padding:6px;background:#0003;border:1px solid #fff2;border-radius:6px;color:inherit;
+        .group {
+          margin:12px 0;
+          border:1px solid rgba(255,255,255,0.1);
+          border-radius:8px;
         }
-        input[type="color"]{width:40px;height:26px;border:none;background:transparent;}
-        .row{display:flex;align-items:center;gap:10px;}
+        .group summary {
+          padding:10px 12px;
+          background:rgba(255,255,255,0.05);
+          cursor:pointer;
+        }
+        .group div {
+          padding:10px 16px 16px;
+          display:grid;
+          grid-template-columns:1fr 1fr;
+          gap:12px;
+        }
+        label {
+          display:flex;
+          flex-direction:column;
+          font-size:0.9rem;
+        }
+        input[type="text"],
+        input[type="number"],
+        select {
+          padding:6px;
+          background:#0003;
+          border:1px solid #fff2;
+          border-radius:6px;
+          color:inherit;
+        }
+        input[type="color"] {
+          width:40px;
+          height:26px;
+          border:none;
+          background:transparent;
+        }
+        .row {
+          display:flex;
+          align-items:center;
+          gap:10px;
+        }
       </style>
 
       <!-- PODSTAWOWE -->
@@ -977,6 +1037,11 @@ class MatchesCardEditor extends HTMLElement {
           <label>Nazwa karty
             <input type="text" data-path="name" value="${c.name}">
           </label>
+
+          <div class="row">
+            <span>Pokaż nazwę</span>
+            <ha-switch data-path="show_name"></ha-switch>
+          </div>
 
           <div class="row">
             <span>Pokaż herby</span>
@@ -1000,13 +1065,14 @@ class MatchesCardEditor extends HTMLElement {
         </div>
       </details>
 
-      <!-- STYL -->
+      <!-- STYL WYPEŁNIENIA -->
       <details id="fill" class="group" ${prev.fill ? "open" : ""}>
         <summary>Styl wypełnienia</summary>
         <div>
           <label>Tryb
             <select data-path="fill_mode">
               <option value="gradient" ${c.fill_mode === "gradient" ? "selected" : ""}>Gradient</option>
+              <option value="premium" ${c.fill_mode === "premium" ? "selected" : ""}>Premium gradient</option>
               <option value="zebra" ${c.fill_mode === "zebra" ? "selected" : ""}>Zebra</option>
               <option value="clear" ${c.fill_mode === "clear" ? "selected" : ""}>Brak</option>
             </select>
@@ -1015,36 +1081,66 @@ class MatchesCardEditor extends HTMLElement {
           ${
             c.fill_mode === "gradient"
               ? `
-            <label>Start %
-              <input type="number" data-type="number" data-path="gradient.start" value="${c.gradient.start}">
-            </label>
+              <label>Start %
+                <input type="number" data-type="number" data-path="gradient.start" value="${c.gradient.start}">
+              </label>
 
-            <label>Koniec %
-              <input type="number" data-type="number" data-path="gradient.end" value="${c.gradient.end}">
-            </label>
+              <label>Koniec %
+                <input type="number" data-type="number" data-path="gradient.end" value="${c.gradient.end}">
+              </label>
 
-            <label>Alfa start
-              <input type="number" data-type="number" step="0.05" data-path="gradient.alpha_start" value="${c.gradient.alpha_start}">
-            </label>
+              <label>Alfa start
+                <input type="number" data-type="number" step="0.05" data-path="gradient.alpha_start" value="${c.gradient.alpha_start}">
+              </label>
 
-            <label>Alfa koniec
-              <input type="number" data-type="number" step="0.05" data-path="gradient.alpha_end" value="${c.gradient.alpha_end}">
-            </label>
-          `
+              <label>Alfa koniec
+                <input type="number" data-type="number" step="0.05" data-path="gradient.alpha_end" value="${c.gradient.alpha_end}">
+              </label>
+            `
+              : ""
+          }
+
+          ${
+            c.fill_mode === "premium"
+              ? `
+              <label>Moc startowa (alfa)
+                <input type="number" data-type="number" step="0.05" min="0" max="1"
+                  data-path="premium.start_alpha"
+                  value="${c.premium?.start_alpha ?? 0.85}">
+              </label>
+
+              <label>Moc środkowa (alfa)
+                <input type="number" data-type="number" step="0.05" min="0" max="1"
+                  data-path="premium.mid_alpha"
+                  value="${c.premium?.mid_alpha ?? 0.35}">
+              </label>
+
+              <label>Moc końcowa (alfa)
+                <input type="number" data-type="number" step="0.05" min="0" max="1"
+                  data-path="premium.end_alpha"
+                  value="${c.premium?.end_alpha ?? 0.0}">
+              </label>
+
+              <label>Pozycja pastelowa %
+                <input type="number" data-type="number" step="1" min="0" max="100"
+                  data-path="premium.pastel_pos"
+                  value="${c.premium?.pastel_pos ?? 15}">
+              </label>
+            `
               : ""
           }
 
           ${
             c.fill_mode === "zebra"
               ? `
-            <label>Kolor zebry
-              <input type="color" data-path="zebra_color" value="${c.zebra_color}">
-            </label>
+              <label>Kolor zebry
+                <input type="color" data-path="zebra_color" value="${c.zebra_color}">
+              </label>
 
-            <label>Alfa
-              <input type="number" data-type="number" step="0.05" data-path="zebra_alpha" value="${c.zebra_alpha}">
-            </label>
-          `
+              <label>Alfa
+                <input type="number" data-type="number" step="0.05" data-path="zebra_alpha" value="${c.zebra_alpha}">
+              </label>
+            `
               : ""
           }
         </div>
@@ -1118,7 +1214,9 @@ class MatchesCardEditor extends HTMLElement {
 
       el.addEventListener("input", (ev) => {
         let v = ev.target.value;
-        if (type === "number") v = Number(v);
+        if (type === "number") {
+          v = Number(v);
+        }
         this._updatePath(path, v);
       });
     });
@@ -1127,7 +1225,7 @@ class MatchesCardEditor extends HTMLElement {
     root.querySelectorAll("select[data-path]").forEach((sel) => {
       sel.addEventListener("change", (ev) => {
         this._updatePath(sel.getAttribute("data-path"), ev.target.value);
-        this._render(); // przeładować sekcję odpowiednią
+        this._render(); // przeładować, żeby pokazać odpowiednie pola
       });
     });
 
@@ -1149,11 +1247,10 @@ class MatchesCardEditor extends HTMLElement {
 if (!customElements.get("matches-card-editor")) {
   customElements.define("matches-card-editor", MatchesCardEditor);
 }
+
 // ===== FILE INCLUDED: dist/matches-card.js =====
 // ============================================================================
-//  Matches Card (90minut) – v0.3.XXX (YAML + EDITOR SYNC, FIXED LAYOUT)
-//  - Gradient + pionowa linia jak w LeagueTableCard
-//  - Herby: białe tło 50% + zaokrąglenia
+//  Matches Card (90minut) – v0.3.XXX (Premium Gradient + Editor Sync)
 // ============================================================================
 
 class MatchesCard extends HTMLElement {
@@ -1165,7 +1262,7 @@ class MatchesCard extends HTMLElement {
       full_team_names: true,
       show_result_symbols: true,
 
-      fill_mode: "gradient",
+      fill_mode: "gradient", // gradient | premium | zebra | clear
 
       font_size: {
         date: 0.9,
@@ -1193,6 +1290,14 @@ class MatchesCard extends HTMLElement {
         alpha_end: 0.55,
       },
 
+      // NEW — PREMIUM GRADIENT (SOFASCORE-STYLE)
+      premium: {
+        start_alpha: 0.85,
+        mid_alpha: 0.35,
+        end_alpha: 0.0,
+        pastel_pos: 15,
+      },
+
       zebra_color: "#f0f0f0",
       zebra_alpha: 0.4,
 
@@ -1207,27 +1312,21 @@ class MatchesCard extends HTMLElement {
       const bv = base ? base[k] : undefined;
       const ev = extra ? extra[k] : undefined;
       if (
-        bv &&
-        ev &&
+        bv && ev &&
         typeof bv === "object" &&
         !Array.isArray(bv) &&
         typeof ev === "object" &&
         !Array.isArray(ev)
-      ) {
-        out[k] = this._mergeDeep(bv, ev);
-      } else if (ev !== undefined) {
-        out[k] = ev;
-      } else {
-        out[k] = bv;
-      }
+      ) out[k] = this._mergeDeep(bv, ev);
+      else if (ev !== undefined) out[k] = ev;
+      else out[k] = bv;
     });
     return out;
   }
 
   setConfig(config) {
-    if (!config || !config.entity) {
+    if (!config || !config.entity)
       throw new Error("Entity is required");
-    }
 
     const merged = this._mergeDeep(MatchesCard.defaultConfig, config);
     merged.entity = config.entity;
@@ -1237,7 +1336,6 @@ class MatchesCard extends HTMLElement {
   set hass(hass) {
     this._hass = hass;
     const entity = hass.states[this.config.entity];
-
     if (!entity) {
       this.innerHTML = "<ha-card>Encja nie istnieje.</ha-card>";
       return;
@@ -1251,71 +1349,68 @@ class MatchesCard extends HTMLElement {
         : "";
 
     const style = `
-      <style>
-        ha-card {
-          padding:10px 0;
-          font-family: Arial, sans-serif;
-        }
-        table { width:100%; border-collapse:collapse; }
-        tr { border-bottom:1px solid rgba(0,0,0,0.1); }
-        td { padding:4px 6px; vertical-align:middle; }
+    <style>
+      ha-card {
+        padding:10px 0;
+        font-family: Arial, sans-serif;
+      }
+      table { width:100%; border-collapse:collapse; }
+      tr { border-bottom:1px solid rgba(0,0,0,0.1); }
+      td { padding:4px 6px; vertical-align:middle; }
 
-        .dual-cell {
-          display:flex;
-          flex-direction:column;
-          justify-content:center;
-          align-items:center;
-        }
+      .dual-cell {
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        align-items:center;
+        gap:4px;
+      }
 
-        .crest-cell { gap:4px; }
+      .crest-box {
+        background: rgba(255,255,255,0.5);
+        border-radius: 10px;
+        padding: 4px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        box-shadow: 0 0 3px rgba(0,0,0,0.2);
+      }
 
-        /* Herby: białe tło 50% + zaokrąglenia */
-        .crest-box {
-          background: rgba(255,255,255,0.5);
-          border-radius: 10px;
-          padding: 4px;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          box-shadow: 0 0 3px rgba(0,0,0,0.2);
-        }
+      .team-cell { text-align:left; padding-left:8px; }
+      .team-row { line-height:1.3em; }
 
-        .league-cell { padding-right:12px; }
+      .score-cell {
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        align-items:center;
+        line-height:1.3em;
+      }
 
-        .team-cell { text-align:left; padding-left:8px; }
-        .team-row { line-height:1.3em; }
+      .result-circle {
+        border-radius:50%;
+        width:${this.config.icon_size.result}px;
+        height:${this.config.icon_size.result}px;
+        display:flex;
+        align-items:center;
+        justify-content:center;
+        color:#fff;
+        font-weight:bold;
+        margin:auto;
+      }
 
-        .score-cell {
-          display:flex;
-          flex-direction:column;
-          justify-content:center;
-          align-items:center;
-          line-height:1.3em;
-        }
-
-        .result-cell { text-align:center; }
-        .result-circle {
-          border-radius:50%;
-          width:${this.config.icon_size.result}px;
-          height:${this.config.icon_size.result}px;
-          display:flex;
-          align-items:center;
-          justify-content:center;
-          color:#fff; font-weight:bold; margin:auto;
-        }
-
-        ${zebraCSS}
-      </style>
+      ${zebraCSS}
+    </style>
     `;
 
     const rows = matches.map((m) => this._row(m)).join("");
-
-    const header = this.config.show_name ? `header="${this.config.name}"` : "";
 
     if (this.config.lite_mode) {
       this.innerHTML = `${style}<table>${rows}</table>`;
       return;
     }
+
+    const header = this.config.show_name ? `header="${this.config.name}"` : "";
 
     this.innerHTML = `
       ${style}
@@ -1326,90 +1421,92 @@ class MatchesCard extends HTMLElement {
   }
 
   _row(m) {
-    let dateStr = "";
-    let timeStr = "";
+    let dateStr = "", timeStr = "";
 
     if (m.date) {
-      const raw = String(m.date);
-      const dt = new Date(raw.replace(" ", "T"));
+      const dt = new Date(m.date.replace(" ", "T"));
       if (!isNaN(dt.getTime())) {
         dateStr = dt.toLocaleDateString("pl-PL", { day: "2-digit", month: "2-digit", year: "numeric" });
         timeStr = dt.toLocaleTimeString("pl-PL", { hour: "2-digit", minute: "2-digit" });
-      } else {
-        const [d, t] = raw.split(" ");
-        dateStr = d || "";
-        timeStr = t || "";
       }
     }
 
     const bottomLine = m.finished ? "KONIEC" : timeStr;
-
     const full = this.config.full_team_names !== false;
+
     const home = full ? m.home : this._short(m.home);
     const away = full ? m.away : this._short(m.away);
 
     const [hs, as] = (m.score || "-").split("-");
-    const homeClass = m.result === "win" ? "bold" : m.result === "loss" ? "dim" : "";
-    const awayClass = m.result === "loss" ? "bold" : m.result === "win" ? "dim" : "";
 
     return `
-      <tr style="${this._gradient(m)}">
+    <tr style="${this._computeRowBackground(m)}">
 
-        <td style="width:10%; text-align:center;">
-          <div style="font-size:${this.config.font_size.date}rem">${dateStr}</div>
-          <div style="font-size:${this.config.font_size.status}rem">${bottomLine}</div>
-        </td>
+      <td style="width:10%;text-align:center;">
+        <div style="font-size:${this.config.font_size.date}rem">${dateStr}</div>
+        <div style="font-size:${this.config.font_size.status}rem">${bottomLine}</div>
+      </td>
 
-        <td class="league-cell" style="width:10%; text-align:center;">
-          ${this._league(m.league)}
-        </td>
+      <td style="width:10%;text-align:center;">
+        ${this._league(m.league)}
+      </td>
 
+      ${
+        this.config.show_logos
+          ? `<td class="dual-cell" style="width:10%;">
+              <div class="crest-box">
+                <img src="${m.logo_home}" height="${this.config.icon_size.crest}">
+              </div>
+              <div class="crest-box">
+                <img src="${m.logo_away}" height="${this.config.icon_size.crest}">
+              </div>
+            </td>`
+          : ""
+      }
+
+      <td class="team-cell">
+        <div class="team-row">${home}</div>
+        <div class="team-row">${away}</div>
+      </td>
+
+      <td class="score-cell" style="width:10%;">
+        <div style="font-size:${this.config.font_size.score}rem">${hs}</div>
+        <div style="font-size:${this.config.font_size.score}rem">${as}</div>
+      </td>
+
+      <td style="width:8%; text-align:center;">
         ${
-          this.config.show_logos
-            ? `<td class="crest-cell dual-cell" style="width:10%;">
-                 <div class="crest-box">
-                   <img src="${m.logo_home}" height="${this.config.icon_size.crest}">
-                 </div>
-                 <div class="crest-box">
-                   <img src="${m.logo_away}" height="${this.config.icon_size.crest}">
-                 </div>
-               </td>`
+          this.config.show_result_symbols && m.result
+            ? `<div class="result-circle" style="background:${this.config.colors[m.result]}">
+                 ${m.result.charAt(0).toUpperCase()}
+               </div>`
             : ""
         }
+      </td>
 
-        <td class="team-cell">
-          <div class="team-row ${homeClass}" style="font-size:${this.config.font_size.teams}rem">${home}</div>
-          <div class="team-row ${awayClass}" style="font-size:${this.config.font_size.teams}rem">${away}</div>
-        </td>
-
-        <td class="score-cell" style="width:10%;">
-          <div class="${homeClass}" style="font-size:${this.config.font_size.score}rem">${hs}</div>
-          <div class="${awayClass}" style="font-size:${this.config.font_size.score}rem">${as}</div>
-        </td>
-
-        <td class="result-cell" style="width:8%;">
-          ${
-            this.config.show_result_symbols && m.result
-              ? `<div class="result-circle" style="background:${this.config.colors[m.result]}">
-                   ${m.result.charAt(0).toUpperCase()}
-                 </div>`
-              : ""
-          }
-        </td>
-
-      </tr>
-    `;
+    </tr>`;
   }
 
-  _short(name) {
-    if (!name) return "";
-    return name.split(" ").filter(Boolean)[0];
+  // -------------------------------------------------------
+  // BACKGROUND SELECTOR (normal, premium, zebra, none)
+  // -------------------------------------------------------
+  _computeRowBackground(m) {
+    if (!m.result) return "";
+
+    if (this.config.fill_mode === "premium")
+      return this._premiumGradient(m);
+
+    if (this.config.fill_mode === "gradient")
+      return this._classicGradient(m);
+
+    if (this.config.fill_mode === "zebra")
+      return ""; // zebra handled by CSS
+
+    return "";
   }
 
-  /* Gradient + pionowy pasek 3px w kolorze wyniku */
-  _gradient(m) {
-    if (this.config.fill_mode !== "gradient" || !m.result) return "";
-
+  // CLASSIC GRADIENT + LEFT LINE
+  _classicGradient(m) {
     const c = this.config.colors[m.result];
     const g = this.config.gradient;
 
@@ -1424,10 +1521,31 @@ class MatchesCard extends HTMLElement {
     `;
   }
 
+  // PREMIUM GRADIENT (Sofascore-style)
+  _premiumGradient(m) {
+    const c = this.config.colors[m.result];
+    const p = this.config.premium;
+
+    return `
+      background: linear-gradient(to right,
+        ${this._rgba(c, p.start_alpha)} 0%,
+        ${this._rgba(c, p.mid_alpha)} ${p.pastel_pos}%,
+        ${this._rgba(c, p.end_alpha)} 100%
+      );
+      border-left: 3px solid ${c};
+    `;
+  }
+
+  _short(name) {
+    if (!name) return "";
+    return name.split(" ")[0];
+  }
+
   _league(code) {
     const file =
       code === "L" ? "ekstraklasa.png" :
-      code === "PP" ? "puchar.png" : null;
+      code === "PP" ? "puchar.png" :
+      null;
 
     if (!file) return `<div>${code}</div>`;
 
