@@ -1,8 +1,9 @@
 // ============================================================================
-//  League Table Card – FULL EDITOR v0.1.100
+//  League Table Card Editor – FIXED (value binding + alpha colors + debounce)
 // ============================================================================
 
 class LeagueTableCardEditor extends HTMLElement {
+
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -11,48 +12,27 @@ class LeagueTableCardEditor extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = JSON.parse(JSON.stringify(config || {}));
+    this._config = JSON.parse(JSON.stringify(config));
     this.render();
   }
 
-  // -----------------------------------------------------
-  // UPDATE + DEBOUNCE
-  // -----------------------------------------------------
-  _update(path, value) {
-    const cfg = JSON.parse(JSON.stringify(this._config));
-
-    // Ustawiamy w configu głębokie pola
-    const parts = path.split(".");
-    let obj = cfg;
-    while (parts.length > 1) {
-      const p = parts.shift();
-      if (!obj[p]) obj[p] = {};
-      obj = obj[p];
-    }
-    obj[parts[0]] = value;
-
-    this._config = cfg;
+  _debounceUpdate(key, value) {
+    this._config[key] = value;
 
     clearTimeout(this._debounce);
-    this._debounce = setTimeout(() => this._apply(), 700);
+    this._debounce = setTimeout(() => {
+      this.dispatchEvent(
+        new CustomEvent("config-changed", {
+          detail: { config: this._config }
+        })
+      );
+    }, 700);
   }
 
-  _apply() {
-    const ev = new CustomEvent("config-changed", {
-      detail: { config: this._config },
-      bubbles: true,
-      composed: true,
-    });
-    this.dispatchEvent(ev);
-  }
-
-  // -----------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------
   render() {
     if (!this.shadowRoot) return;
+
     const c = this._config;
-    const hl = c.highlight || {};
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -62,216 +42,154 @@ class LeagueTableCardEditor extends HTMLElement {
           border: 1px solid rgba(255,255,255,0.15);
           overflow: hidden;
         }
-
-        summary {
+        .group summary {
           padding: 10px 12px;
-          cursor: pointer;
           font-size: 1rem;
+          cursor: pointer;
           background: rgba(255,255,255,0.05);
         }
-
-        .content {
+        .group > div {
           padding: 10px 16px 18px 16px;
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 12px;
         }
-
-        label {
-          display: flex;
-          flex-direction: column;
-          font-size: 0.85rem;
-          opacity: 0.85;
-        }
-
-        input[type="number"],
-        select,
-        input[type="text"] {
+        label { font-size: 0.85rem; display:flex; flex-direction:column; }
+        input[type="number"], input[type="text"] {
           padding: 4px 6px;
           border-radius: 6px;
           border: 1px solid rgba(255,255,255,0.20);
           background: rgba(0,0,0,0.2);
           color: inherit;
         }
-
         input[type="color"] {
-          padding: 0;
-          width: 40px;
-          height: 28px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-        }
-
-        .switch {
-          display: flex;
-          align-items: center;
-          gap: 10px;
+          width:40px;
+          height:28px;
+          padding:0;
+          border:none;
+          background:transparent;
         }
       </style>
 
       <!-- PODSTAWOWE -->
       <details class="group" open>
         <summary>Podstawowe</summary>
-        <div class="content">
+        <div>
           <label>
             Nazwa karty
-            <input type="text"
-              value="${c.name ?? ""}"
-              @input="${e => this._update("name", e.target.value)}">
+            <input id="name" type="text" value="${c.name ?? ''}">
           </label>
 
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.show_name !== false}"
-              @change="${e => this._update("show_name", e.target.checked)}">
-            </ha-switch>
-            Pokaż nagłówek
-          </label>
-
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.show_trend !== false}"
-              @change="${e => this._update("show_trend", e.target.checked)}">
-            </ha-switch>
-            Pokaż kolumnę trendu
-          </label>
-
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.lite_mode === true}"
-              @change="${e => this._update("lite_mode", e.target.checked)}">
-            </ha-switch>
+          <label>
             Tryb LITE
+            <ha-switch id="lite_mode" ?checked="${c.lite_mode === true}"></ha-switch>
+          </label>
+
+          <label>
+            Pokaz trend
+            <ha-switch id="show_trend" ?checked="${c.show_trend !== false}"></ha-switch>
           </label>
         </div>
       </details>
 
-      <!-- ROZMIARY CZCIONEK -->
-      <details class="group">
-        <summary>Rozmiary czcionek</summary>
-        <div class="content">
+      <!-- PODŚWIETLENIA -->
+      <details class="group" open>
+        <summary>Podświetlenia</summary>
+        <div>
           <label>
-            Nagłówek
-            <input type="number" step="0.1"
-              value="${c.font_size?.header ?? 0.8}"
-              @input="${e => this._update("font_size.header", Number(e.target.value))}">
+            TOP – kolor
+            <input id="top_color" type="color" value="${c.highlight?.top_color ?? '#00ff00'}">
           </label>
 
           <label>
-            Wiersz
-            <input type="number" step="0.1"
-              value="${c.font_size?.row ?? 0.9}"
-              @input="${e => this._update("font_size.row", Number(e.target.value))}">
+            TOP – alfa
+            <input id="top_alpha" type="number" min="0" max="1" step="0.05"
+                   value="${c.highlight?.top_alpha ?? 0.35}">
           </label>
 
           <label>
-            Drużyna
-            <input type="number" step="0.1"
-              value="${c.font_size?.team ?? 1.0}"
-              @input="${e => this._update("font_size.team", Number(e.target.value))}">
-          </label>
-        </div>
-      </details>
-
-      <!-- POZYCJE KLUCZOWE -->
-      <details class="group">
-        <summary>Konfiguracja pozycji</summary>
-        <div class="content">
-
-          <label>
-            Top (LM) – ile miejsc
-            <input type="number" min="0"
-              value="${hl.top_count ?? 2}"
-              @input="${e => this._update("highlight.top_count", Number(e.target.value))}">
+            MIEJSCA 3–4 – kolor
+            <input id="mid_color" type="color" value="${c.highlight?.mid_color ?? '#468cd2'}">
           </label>
 
           <label>
-            Europa (LK/LE) – ile miejsc
-            <input type="number" min="0"
-              value="${hl.eu_count ?? 2}"
-              @input="${e => this._update("highlight.eu_count", Number(e.target.value))}">
+            MIEJSCA 3–4 – alfa
+            <input id="mid_alpha" type="number" min="0" max="1" step="0.05"
+                   value="${c.highlight?.mid_alpha ?? 0.35}">
           </label>
 
           <label>
-            Spadek – ile miejsc
-            <input type="number" min="0"
-              value="${hl.bottom_count ?? 3}"
-              @input="${e => this._update("highlight.bottom_count", Number(e.target.value))}">
+            SPADKOWE – kolor
+            <input id="bottom_color" type="color" value="${c.highlight?.bottom_color ?? '#e23b3b'}">
           </label>
 
-        </div>
-      </details>
+          <label>
+            SPADKOWE – alfa
+            <input id="bottom_alpha" type="number" min="0" max="1" step="0.05"
+                   value="${c.highlight?.bottom_alpha ?? 0.35}">
+          </label>
 
-      <!-- KOLORY PODŚWIETLEŃ -->
-      <details class="group">
-        <summary>Kolory podświetleń (z ALFĄ)</summary>
-        <div class="content">
-
-          <!-- MOJA DRUŻYNA -->
           <label>
             Moja drużyna – kolor
-            <input type="color"
-              value="${hl.favorite_color ?? "#ffffff"}"
-              @input="${e => this._update("highlight.favorite_color", e.target.value)}">
+            <input id="favorite_color" type="color"
+                   value="${c.highlight?.favorite_color ?? '#ffffff'}">
           </label>
 
           <label>
-            Alfa
-            <input type="number" min="0" max="1" step="0.05"
-              value="${hl.favorite_alpha ?? 0.55}"
-              @input="${e => this._update("highlight.favorite_alpha", Number(e.target.value))}">
+            Moja drużyna – alfa
+            <input id="favorite_alpha" type="number" min="0" max="1" step="0.05"
+                   value="${c.highlight?.favorite_alpha ?? 0.35}">
           </label>
-
-          <!-- TOP miejsca -->
-          <label>
-            Top – kolor
-            <input type="color"
-              value="${hl.top_color ?? "#3ba55d"}"
-              @input="${e => this._update("highlight.top_color", e.target.value)}">
-          </label>
-
-          <label>
-            Alfa
-            <input type="number" min="0" max="1" step="0.05"
-              value="${hl.top_alpha ?? 0.55}"
-              @input="${e => this._update("highlight.top_alpha", Number(e.target.value))}">
-          </label>
-
-          <!-- EUROPEJSKIE -->
-          <label>
-            Europa – kolor
-            <input type="color"
-              value="${hl.eu_color ?? "#468cd2"}"
-              @input="${e => this._update("highlight.eu_color", e.target.value)}">
-          </label>
-
-          <label>
-            Alfa
-            <input type="number" min="0" max="1" step="0.05"
-              value="${hl.eu_alpha ?? 0.55}"
-              @input="${e => this._update("highlight.eu_alpha", Number(e.target.value))}">
-          </label>
-
-          <!-- SPADKOWE -->
-          <label>
-            Spadek – kolor
-            <input type="color"
-              value="${hl.bottom_color ?? "#e23b3b"}"
-              @input="${e => this._update("highlight.bottom_color", e.target.value)}">
-          </label>
-
-          <label>
-            Alfa
-            <input type="number" min="0" max="1" step="0.05"
-              value="${hl.bottom_alpha ?? 0.55}"
-              @input="${e => this._update("highlight.bottom_alpha", Number(e.target.value))}">
-          </label>
-
         </div>
       </details>
     `;
+
+    // =====================================
+    //  BIND INPUTS → CONFIG
+    // =====================================
+    const bind = (id, key, group = null) => {
+      const el = this.shadowRoot.getElementById(id);
+      if (!el) return;
+
+      const handler = (e) => {
+        const value =
+          el.type === "number" ? Number(e.target.value)
+          : el.type === "color" ? e.target.value
+          : el.checked ?? e.target.value;
+
+        if (group) {
+          this._config[group][key] = value;
+          this._debounceUpdate(group, { ...this._config[group] });
+        } else {
+          this._debounceUpdate(key, value);
+        }
+      };
+
+      el.addEventListener("input", handler);
+      el.addEventListener("change", handler);
+    };
+
+    // BASIC
+    bind("name", "name");
+    bind("lite_mode", "lite_mode");
+    bind("show_trend", "show_trend");
+
+    // HIGHLIGHT (z alfach)
+    bind("top_color", "top_color", "highlight");
+    bind("top_alpha", "top_alpha", "highlight");
+
+    bind("mid_color", "mid_color", "highlight");
+    bind("mid_alpha", "mid_alpha", "highlight");
+
+    bind("bottom_color", "bottom_color", "highlight");
+    bind("bottom_alpha", "bottom_alpha", "highlight");
+
+    bind("favorite_color", "favorite_color", "highlight");
+    bind("favorite_alpha", "favorite_alpha", "highlight");
   }
+
+  static getConfigElement() { return this; }
+  static getStubConfig() { return {}; }
 }
 
 customElements.define("league-table-card-editor", LeagueTableCardEditor);
