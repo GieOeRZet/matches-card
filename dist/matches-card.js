@@ -1,5 +1,5 @@
 // ============================================================================
-//  Matches Card (90minut) – v0.3.000 + FIXED LAYOUT (W/P/R, wyniki, odstępy)
+//  Matches Card (90minut) – v0.3.000 + FIXED STATUS (no undefined)
 // ============================================================================
 
 class MatchesCard extends HTMLElement {
@@ -98,11 +98,11 @@ class MatchesCard extends HTMLElement {
         }
 
         .crest-cell {
-          gap:3px; /* minimalny odstęp między herbami */
+          gap:3px;
         }
 
         .league-cell {
-          padding-right:12px; /* większy odstęp od herbów */
+          padding-right:12px;
         }
 
         .team-cell {
@@ -119,7 +119,7 @@ class MatchesCard extends HTMLElement {
           flex-direction:column;
           justify-content:center;
           align-items:center;
-          line-height:1.3em;  /* aby wynik był w tej samej linii co drużyny */
+          line-height:1.3em;
         }
 
         .result-cell {
@@ -171,7 +171,7 @@ class MatchesCard extends HTMLElement {
         <!-- DATA -->
         <td style="width:10%; text-align:center;">
           <div style="font-size:${this.config.font_size.date}rem">${m.date}</div>
-          <div style="font-size:${this.config.font_size.status}rem">${m.status}</div>
+          <div style="font-size:${this.config.font_size.status}rem">${m.status ?? ""}</div>
         </td>
 
         <!-- LIGA -->
@@ -193,13 +193,13 @@ class MatchesCard extends HTMLElement {
           <div class="team-row ${awayBold}" style="font-size:${this.config.font_size.teams}rem">${m.away}</div>
         </td>
 
-        <!-- WYNIK – osobna pionowa sekcja wyrównana do drużyn -->
+        <!-- WYNIK -->
         <td class="score-cell" style="width:10%;">
           <div class="${homeBold}" style="font-size:${this.config.font_size.score}rem">${homeScore}</div>
           <div class="${awayBold}" style="font-size:${this.config.font_size.score}rem">${awayScore}</div>
         </td>
 
-        <!-- W/P/R – OSOBNA KOLUMNA -->
+        <!-- SYMBOL W/P/R -->
         <td class="result-cell" style="width:8%;">
           ${this.config.show_result_symbols && m.result ? `
             <div class="result-circle" style="background:${this.config.colors[m.result]}">
