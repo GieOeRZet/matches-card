@@ -1,298 +1,208 @@
 // ============================================================================
-//  Matches Card Editor – accordion, numeric inputs, debounce, stable UI
+//  League Table Card – VISUAL EDITOR
+//  Works with: LeagueTableCard (90minut)
+//  Debounce: 700ms
 // ============================================================================
 
-class MatchesCardEditor extends HTMLElement {
+class LeagueTableCardEditor extends HTMLElement {
 
   constructor() {
     super();
-    this.attachShadow({ mode: "open" });
     this._config = {};
-    this._debounce = null;
+    this._debounceTimer = null;
+    this.attachShadow({ mode: "open" });
   }
 
   setConfig(config) {
     this._config = JSON.parse(JSON.stringify(config));
-
     this.render();
   }
 
-  // --------------------------------------
-  //  Helper: update config with debounce
-  // --------------------------------------
-  _update(key, value) {
-    this._config = {
-      ...this._config,
-      [key]: value
-    };
-
-    clearTimeout(this._debounce);
-    this._debounce = setTimeout(() => this._apply(), 700);
+  set hass(hass) {
+    this._hass = hass;
   }
 
-  _apply() {
+  // Debounce write
+  _debounceSave() {
+    clearTimeout(this._debounceTimer);
+    this._debounceTimer = setTimeout(() => {
+      this._onChange();
+    }, 700);
+  }
+
+  _onChange() {
     const event = new CustomEvent("config-changed", {
       detail: { config: this._config },
       bubbles: true,
-      composed: true
+      composed: true,
     });
     this.dispatchEvent(event);
   }
 
-  // --------------------------------------
-  //  Rendering
-  // --------------------------------------
+  _update(path, value) {
+    const parts = path.split(".");
+    let obj = this._config;
+    for (let i = 0; i < parts.length - 1; i++) {
+      if (!obj[parts[i]]) obj[parts[i]] = {};
+      obj = obj[parts[i]];
+    }
+    obj[parts[parts.length - 1]] = value;
+    this._debounceSave();
+  }
+
   render() {
     if (!this.shadowRoot) return;
 
-    const c = this._config;
+    const cfg = this._config;
 
     this.shadowRoot.innerHTML = `
       <style>
-        .group {
-          margin: 12px 0;
+        .section {
+          border: 1px solid rgba(150,150,150,0.25);
           border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.15);
+          margin: 12px 0;
           overflow: hidden;
         }
-
-        .group summary {
-          padding: 10px 12px;
-          font-size: 1rem;
+        .section-header {
+          background: rgba(200,200,200,0.15);
+          padding: 10px;
+          font-weight: 600;
           cursor: pointer;
-          background: rgba(255,255,255,0.05);
         }
-
-        .group > div {
-          padding: 10px 16px 18px 16px;
-          display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 12px;
+        .section-body {
+          padding: 12px;
         }
-
-        label {
-          display: flex;
-          flex-direction: column;
-          font-size: 0.85rem;
-          opacity: 0.85;
-        }
-
-        input[type="number"] {
-          padding: 4px 6px;
-          border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.20);
-          background: rgba(0,0,0,0.2);
-          color: inherit;
-        }
-
-        input[type="color"] {
-          width: 40px;
-          height: 28px;
-          padding: 0;
-          border: none;
-          background: transparent;
-        }
-
-        .switch {
+        .row {
           display: flex;
           align-items: center;
-          gap: 10px;
+          margin: 8px 0;
+        }
+        .row label {
+          flex: 1;
+        }
+        input[type="number"], input[type="text"], ha-textfield, ha-selector-color {
+          flex: 1;
         }
       </style>
 
-      <!-- NAME + BASIC OPTIONS -->
-      <details class="group" open>
-        <summary>Podstawowe</summary>
-        <div>
-          <label>
-            Nazwa karty
-            <input type="text"
-                   value="${c.name ?? ''}"
-                   @input="${e => this._update('name', e.target.value)}">
-          </label>
+      <div class="section">
+        <div class="section-header" id="sec-basic">⚽ Podstawowe</div>
+        <div class="section-body" style="display:block">
+          <div class="row">
+            <label>Nazwa wyświetlana</label>
+            <input type="text" value="${cfg.name ?? ""}"
+              @input="${(e)=>this._update('name', e.target.value)}">
+          </div>
 
-          <label class="switch">
+          <div class="row">
+            <label>Pokaż nazwę karty</label>
             <ha-switch
-              ?checked="${c.show_logos !== false}"
-              @change="${e => this._update('show_logos', e.target.checked)}">
+              ?checked="${cfg.show_name !== false}"
+              @change="${(e)=>this._update('show_name', e.target.checked)}">
             </ha-switch>
-            Pokaż herby
-          </label>
+          </div>
 
-          <label class="switch">
+          <div class="row">
+            <label>Tryb LITE</label>
             <ha-switch
-              ?checked="${c.full_team_names !== false}"
-              @change="${e => this._update('full_team_names', e.target.checked)}">
+              ?checked="${cfg.lite_mode === true}"
+              @change="${(e)=>this._update('lite_mode', e.target.checked)}">
             </ha-switch>
-            Pełne nazwy
-          </label>
+          </div>
 
-          <label class="switch">
+          <div class="row">
+            <label>Pokaż trend</label>
             <ha-switch
-              ?checked="${c.show_result_symbols !== false}"
-              @change="${e => this._update('show_result_symbols', e.target.checked)}">
+              ?checked="${cfg.show_trend !== false}"
+              @change="${(e)=>this._update('show_trend', e.target.checked)}">
             </ha-switch>
-            Pokaż W/D/L
-          </label>
-
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.lite_mode === true}"
-              @change="${e => this._update('lite_mode', e.target.checked)}">
-            </ha-switch>
-            Tryb LITE
-          </label>
+          </div>
         </div>
-      </details>
+      </div>
 
-      <!-- FILL MODE -->
-      <details class="group">
-        <summary>Styl wypełnienia</summary>
-        <div>
-          <label>
-            Tryb
-            <select @change="${e => this._update('fill_mode', e.target.value)}">
-              <option value="gradient" ${c.fill_mode === "gradient" ? "selected" : ""}>Gradient</option>
-              <option value="zebra" ${c.fill_mode === "zebra" ? "selected" : ""}>Zebra</option>
-              <option value="clear" ${c.fill_mode === "clear" ? "selected" : ""}>Brak</option>
-            </select>
-          </label>
-
-          ${c.fill_mode === "gradient" ? `
-            <label>
-              Start (%)
-              <input type="number" min="0" max="100" value="${c.gradient?.start ?? 35}"
-                     @input="${e => this._update('gradient', {...c.gradient, start: Number(e.target.value)})}">
-            </label>
-
-            <label>
-              Koniec (%)
-              <input type="number" min="0" max="100" value="${c.gradient?.end ?? 100}"
-                     @input="${e => this._update('gradient', {...c.gradient, end: Number(e.target.value)})}">
-            </label>
-
-            <label>
-              Alfa start
-              <input type="number" min="0" max="1" step="0.05"
-                     value="${c.gradient?.alpha_start ?? 0}"
-                     @input="${e => this._update('gradient', {...c.gradient, alpha_start: Number(e.target.value)})}">
-            </label>
-
-            <label>
-              Alfa koniec
-              <input type="number" min="0" max="1" step="0.05"
-                     value="${c.gradient?.alpha_end ?? 0.55}"
-                     @input="${e => this._update('gradient', {...c.gradient, alpha_end: Number(e.target.value)})}">
-            </label>
-          ` : ""}
-
-          ${c.fill_mode === "zebra" ? `
-            <label>
-              Kolor zebry
-              <input type="color"
-                     value="${c.zebra_color ?? "#f0f0f0"}"
-                     @input="${e => this._update('zebra_color', e.target.value)}">
-            </label>
-
-            <label>
-              Alfa zebry
-              <input type="number" min="0" max="1" step="0.05"
-                     value="${c.zebra_alpha ?? 0.4}"
-                     @input="${e => this._update('zebra_alpha', Number(e.target.value))}">
-            </label>
-          ` : ""}
+      <div class="section">
+        <div class="section-header" id="sec-fonts">🔤 Czcionki</div>
+        <div class="section-body" style="display:none">
+          <div class="row">
+            <label>Nagłówek (rem)</label>
+            <input type="number" step="0.1" min="0.5"
+              value="${cfg.font_size?.header ?? 0.8}"
+              @input="${(e)=>this._update('font_size.header', Number(e.target.value))}">
+          </div>
+          <div class="row">
+            <label>Wiersz (rem)</label>
+            <input type="number" step="0.1" min="0.5"
+              value="${cfg.font_size?.row ?? 0.9}"
+              @input="${(e)=>this._update('font_size.row', Number(e.target.value))}">
+          </div>
+          <div class="row">
+            <label>Drużyna (rem)</label>
+            <input type="number" step="0.1" min="0.5"
+              value="${cfg.font_size?.team ?? 1.0}"
+              @input="${(e)=>this._update('font_size.team', Number(e.target.value))}">
+          </div>
         </div>
-      </details>
+      </div>
 
-      <!-- FONTS -->
-      <details class="group">
-        <summary>Rozmiary czcionek</summary>
-        <div>
-          <label>
-            Data
-            <input type="number" step="0.1" value="${c.font_size?.date ?? 0.9}"
-                   @input="${e => this._update('font_size', {...c.font_size, date: Number(e.target.value)})}">
-          </label>
+      <div class="section">
+        <div class="section-header" id="sec-highlight">🎨 Wyróżnienia</div>
+        <div class="section-body" style="display:none">
 
-          <label>
-            Status
-            <input type="number" step="0.1" value="${c.font_size?.status ?? 0.8}"
-                   @input="${e => this._update('font_size', {...c.font_size, status: Number(e.target.value)})}">
-          </label>
+          <div class="row">
+            <label>Top ile?</label>
+            <input type="number" min="0" max="10"
+              value="${cfg.highlight?.top_count ?? 3}"
+              @input="${(e)=>this._update('highlight.top_count', Number(e.target.value))}">
+          </div>
 
-          <label>
-            Drużyny
-            <input type="number" step="0.1" value="${c.font_size?.teams ?? 1.0}"
-                   @input="${e => this._update('font_size', {...c.font_size, teams: Number(e.target.value)})}">
-          </label>
+          <div class="row">
+            <label>Spadkowe ile?</label>
+            <input type="number" min="0" max="10"
+              value="${cfg.highlight?.bottom_count ?? 3}"
+              @input="${(e)=>this._update('highlight.bottom_count', Number(e.target.value))}">
+          </div>
 
-          <label>
-            Wynik
-            <input type="number" step="0.1" value="${c.font_size?.score ?? 1.0}"
-                   @input="${e => this._update('font_size', {...c.font_size, score: Number(e.target.value)})}">
-          </label>
+          <div class="row">
+            <label>Kolor ulubionej</label>
+            <ha-color-picker
+              value="${cfg.highlight?.favorite_color ?? '#fff8e1'}"
+              @color-changed="${(e)=>this._update('highlight.favorite_color', e.detail.value)}">
+            </ha-color-picker>
+          </div>
+
+          <div class="row">
+            <label>Kolor TOP</label>
+            <ha-color-picker
+              value="${cfg.highlight?.top_color ?? '#e8f5e9'}"
+              @color-changed="${(e)=>this._update('highlight.top_color', e.detail.value)}">
+            </ha-color-picker>
+          </div>
+
+          <div class="row">
+            <label>Kolor DOŁU</label>
+            <ha-color-picker
+              value="${cfg.highlight?.bottom_color ?? '#ffebee'}"
+              @color-changed="${(e)=>this._update('highlight.bottom_color', e.detail.value)}">
+            </ha-color-picker>
+          </div>
         </div>
-      </details>
-
-      <!-- ICON SIZES -->
-      <details class="group">
-        <summary>Rozmiary ikon</summary>
-        <div>
-          <label>
-            Liga
-            <input type="number" min="10" max="60"
-                   value="${c.icon_size?.league ?? 26}"
-                   @input="${e => this._update('icon_size', {...c.icon_size, league: Number(e.target.value)})}">
-          </label>
-
-          <label>
-            Herby
-            <input type="number" min="10" max="60"
-                   value="${c.icon_size?.crest ?? 24}"
-                   @input="${e => this._update('icon_size', {...c.icon_size, crest: Number(e.target.value)})}">
-          </label>
-
-          <label>
-            W/D/L
-            <input type="number" min="10" max="60"
-                   value="${c.icon_size?.result ?? 26}"
-                   @input="${e => this._update('icon_size', {...c.icon_size, result: Number(e.target.value)})}">
-          </label>
-        </div>
-      </details>
-
-      <!-- COLORS -->
-      <details class="group">
-        <summary>Kolory W / D / L</summary>
-        <div>
-          <label>
-            Wygrana (W)
-            <input type="color"
-                   value="${c.colors?.win ?? "#3ba55d"}"
-                   @input="${e => this._update('colors', {...c.colors, win: e.target.value})}">
-          </label>
-
-          <label>
-            Remis (D)
-            <input type="color"
-                   value="${c.colors?.draw ?? "#468cd2"}"
-                   @input="${e => this._update('colors', {...c.colors, draw: e.target.value})}">
-          </label>
-
-          <label>
-            Porażka (L)
-            <input type="color"
-                   value="${c.colors?.loss ?? "#e23b3b"}"
-                   @input="${e => this._update('colors', {...c.colors, loss: e.target.value})}">
-          </label>
-        </div>
-      </details>
+      </div>
     `;
-  }
 
-  static get styles() {
-    return window.HAUIUtils?.styles ?? "";
+    // Sekcje rozwijane
+    const toggle = (id) => {
+      const body = this.shadowRoot.querySelector(`#${id}`).nextElementSibling;
+      body.style.display = body.style.display === "none" ? "block" : "none";
+    };
+
+    this.shadowRoot.querySelector("#sec-basic")
+      .addEventListener("click", () => toggle("sec-basic"));
+    this.shadowRoot.querySelector("#sec-fonts")
+      .addEventListener("click", () => toggle("sec-fonts"));
+    this.shadowRoot.querySelector("#sec-highlight")
+      .addEventListener("click", () => toggle("sec-highlight"));
   }
 }
 
-customElements.define("matches-card-editor", MatchesCardEditor);
+// Rejestracja edytora
+customElements.define("league-table-card-editor", LeagueTableCardEditor);
