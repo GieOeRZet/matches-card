@@ -1,370 +1,298 @@
 // ============================================================================
-//  League Table Card Editor – v0.1.000
-//  - Powiązany z league-table-card
-//  - Debounce ~700 ms dla inputów
-//  - Sekcje: Podstawy, Czcionki, Podświetlenia
+//  Matches Card Editor – accordion, numeric inputs, debounce, stable UI
 // ============================================================================
 
-(function () {
-  const DEFAULT_CONFIG = {
-    name: "Tabela ligowa",
-    show_name: true,
-    lite_mode: false,
-    show_trend: true,
+class MatchesCardEditor extends HTMLElement {
 
-    font_size: {
-      header: 0.8,
-      row: 0.9,
-      team: 1.0,
-    },
+  constructor() {
+    super();
+    this.attachShadow({ mode: "open" });
+    this._config = {};
+    this._debounce = null;
+  }
 
-    highlight: {
-      favorite: true,
-      top_count: 3,
-      bottom_count: 3,
-      favorite_color: "#fff8e1",
-      top_color: "#e8f5e9",
-      bottom_color: "#ffebee",
-    },
-  };
+  setConfig(config) {
+    this._config = JSON.parse(JSON.stringify(config));
 
-  const deepMerge = (target, source) => {
-    if (!source) return target;
-    Object.keys(source).forEach((key) => {
-      const sv = source[key];
-      if (sv && typeof sv === "object" && !Array.isArray(sv)) {
-        if (!target[key] || typeof target[key] !== "object") {
-          target[key] = {};
-        }
-        deepMerge(target[key], sv);
-      } else {
-        target[key] = sv;
-      }
+    this.render();
+  }
+
+  // --------------------------------------
+  //  Helper: update config with debounce
+  // --------------------------------------
+  _update(key, value) {
+    this._config = {
+      ...this._config,
+      [key]: value
+    };
+
+    clearTimeout(this._debounce);
+    this._debounce = setTimeout(() => this._apply(), 700);
+  }
+
+  _apply() {
+    const event = new CustomEvent("config-changed", {
+      detail: { config: this._config },
+      bubbles: true,
+      composed: true
     });
-    return target;
-  };
+    this.dispatchEvent(event);
+  }
 
-  class LeagueTableCardEditor extends HTMLElement {
-    constructor() {
-      super();
-      this._config = {};
-      this._debouncers = {};
-    }
+  // --------------------------------------
+  //  Rendering
+  // --------------------------------------
+  render() {
+    if (!this.shadowRoot) return;
 
-    setConfig(config) {
-      this._config = config || {};
-      this._render();
-    }
+    const c = this._config;
 
-    set hass(hass) {
-      this._hass = hass;
-    }
-
-    _effectiveConfig() {
-      const base = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-      return deepMerge(base, this._config || {});
-    }
-
-    _dispatchConfig(config) {
-      const ev = new Event("config-changed", {
-        bubbles: true,
-        composed: true,
-      });
-      ev.detail = { config };
-      this.dispatchEvent(ev);
-    }
-
-    _updatePath(path, value) {
-      const cfg = JSON.parse(JSON.stringify(this._config || {}));
-      const keys = Array.isArray(path) ? path : String(path).split(".");
-      let obj = cfg;
-      for (let i = 0; i < keys.length - 1; i++) {
-        const k = keys[i];
-        if (!obj[k] || typeof obj[k] !== "object") {
-          obj[k] = {};
+    this.shadowRoot.innerHTML = `
+      <style>
+        .group {
+          margin: 12px 0;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.15);
+          overflow: hidden;
         }
-        obj = obj[k];
-      }
-      obj[keys[keys.length - 1]] = value;
-      this._config = cfg;
-      this._dispatchConfig(cfg);
-    }
 
-    _debouncedUpdate(path, value) {
-      const key = Array.isArray(path) ? path.join(".") : String(path);
-      if (this._debouncers[key]) {
-        clearTimeout(this._debouncers[key]);
-      }
-      this._debouncers[key] = setTimeout(() => {
-        this._updatePath(path, value);
-      }, 700);
-    }
+        .group summary {
+          padding: 10px 12px;
+          font-size: 1rem;
+          cursor: pointer;
+          background: rgba(255,255,255,0.05);
+        }
 
-    _bindInput(selector, path, parser = (v) => v, debounced = true) {
-      const el = this.querySelector(selector);
-      if (!el) return;
-      el.addEventListener("input", (ev) => {
-        const v = parser(ev.target.value);
-        if (debounced) this._debouncedUpdate(path, v);
-        else this._updatePath(path, v);
-      });
-    }
+        .group > div {
+          padding: 10px 16px 18px 16px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
+        }
 
-    _bindCheckbox(selector, path) {
-      const el = this.querySelector(selector);
-      if (!el) return;
-      el.addEventListener("change", (ev) => {
-        this._updatePath(path, ev.target.checked);
-      });
-    }
+        label {
+          display: flex;
+          flex-direction: column;
+          font-size: 0.85rem;
+          opacity: 0.85;
+        }
 
-    _render() {
-      const cfg = this._effectiveConfig();
+        input[type="number"] {
+          padding: 4px 6px;
+          border-radius: 6px;
+          border: 1px solid rgba(255,255,255,0.20);
+          background: rgba(0,0,0,0.2);
+          color: inherit;
+        }
 
-      this.innerHTML = `
-        <style>
-          .ltce-root {
-            padding: 16px;
-            font-family: var(--paper-font-body1_-_font-family, inherit);
-          }
-          .ltce-section {
-            margin-bottom: 20px;
-            padding-bottom: 12px;
-            border-bottom: 1px solid var(--divider-color, #ccc);
-          }
-          .ltce-section:last-of-type {
-            border-bottom: none;
-          }
-          .ltce-section h3 {
-            margin: 0 0 10px;
-            font-size: 1.05rem;
-            font-weight: 600;
-          }
-          .ltce-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 10px 18px;
-          }
-          .ltce-field {
-            display: flex;
-            flex-direction: column;
-            gap: 4px;
-          }
-          .ltce-field label {
-            font-size: 0.85rem;
-            opacity: 0.9;
-          }
-          .ltce-checkbox {
-            width: 16px;
-            height: 16px;
-          }
-          .ltce-input,
-          .ltce-number,
-          .ltce-select {
-            width: 100%;
-            padding: 4px 6px;
-            border-radius: 4px;
-            border: 1px solid var(--divider-color, #aaa);
-            background: var(--card-background-color, #fff);
-            color: var(--primary-text-color, #000);
-          }
-          .ltce-number {
-            text-align: right;
-          }
-          .ltce-color {
-            width: 48px;
-            height: 28px;
-            border-radius: 4px;
-            border: 1px solid var(--divider-color, #aaa);
-          }
-          .ltce-note {
-            font-size: 0.75rem;
-            opacity: 0.7;
-          }
-        </style>
+        input[type="color"] {
+          width: 40px;
+          height: 28px;
+          padding: 0;
+          border: none;
+          background: transparent;
+        }
 
-        <div class="ltce-root">
+        .switch {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+        }
+      </style>
 
-          <!-- PODSTAWY -->
-          <div class="ltce-section">
-            <h3>Podstawy</h3>
-            <div class="ltce-grid">
+      <!-- NAME + BASIC OPTIONS -->
+      <details class="group" open>
+        <summary>Podstawowe</summary>
+        <div>
+          <label>
+            Nazwa karty
+            <input type="text"
+                   value="${c.name ?? ''}"
+                   @input="${e => this._update('name', e.target.value)}">
+          </label>
 
-              <div class="ltce-field">
-                <label>Encja sensora</label>
-                <input id="ltce-entity" class="ltce-input" value="${cfg.entity || ""}">
-              </div>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.show_logos !== false}"
+              @change="${e => this._update('show_logos', e.target.checked)}">
+            </ha-switch>
+            Pokaż herby
+          </label>
 
-              <div class="ltce-field">
-                <label>Nazwa karty (header)</label>
-                <input id="ltce-name" class="ltce-input" value="${cfg.name}">
-              </div>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.full_team_names !== false}"
+              @change="${e => this._update('full_team_names', e.target.checked)}">
+            </ha-switch>
+            Pełne nazwy
+          </label>
 
-              <div class="ltce-field">
-                <label>
-                  <input id="ltce-show-name" class="ltce-checkbox" type="checkbox"
-                    ${cfg.show_name ? "checked" : ""}>
-                  Pokaż nazwę karty
-                </label>
-              </div>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.show_result_symbols !== false}"
+              @change="${e => this._update('show_result_symbols', e.target.checked)}">
+            </ha-switch>
+            Pokaż W/D/L
+          </label>
 
-              <div class="ltce-field">
-                <label>
-                  <input id="ltce-lite-mode" class="ltce-checkbox" type="checkbox"
-                    ${cfg.lite_mode ? "checked" : ""}>
-                  Tryb LITE (bez tła ha-card)
-                </label>
-              </div>
-
-              <div class="ltce-field">
-                <label>
-                  <input id="ltce-show-trend" class="ltce-checkbox" type="checkbox"
-                    ${cfg.show_trend ? "checked" : ""}>
-                  Pokaż kolumnę TREND
-                </label>
-                <div class="ltce-note">
-                  TREND korzysta z pola <code>trend</code> w każdym wierszu tabeli (opcjonalne).
-                </div>
-              </div>
-
-            </div>
-          </div>
-
-          <!-- CZCIONKI -->
-          <div class="ltce-section">
-            <h3>Czcionki</h3>
-            <div class="ltce-grid">
-
-              <div class="ltce-field">
-                <label>Nagłówek kolumn – font-size (rem)</label>
-                <input id="ltce-font-header" class="ltce-number" type="number"
-                  step="0.1" value="${cfg.font_size.header}">
-              </div>
-
-              <div class="ltce-field">
-                <label>Wiersze – font-size (rem)</label>
-                <input id="ltce-font-row" class="ltce-number" type="number"
-                  step="0.1" value="${cfg.font_size.row}">
-              </div>
-
-              <div class="ltce-field">
-                <label>Nazwa drużyny – font-size (rem)</label>
-                <input id="ltce-font-team" class="ltce-number" type="number"
-                  step="0.1" value="${cfg.font_size.team}">
-              </div>
-
-            </div>
-          </div>
-
-          <!-- PODŚWIETLENIA -->
-          <div class="ltce-section">
-            <h3>Podświetlenia – TOP / spadkowe / moja drużyna</h3>
-            <div class="ltce-grid">
-
-              <div class="ltce-field">
-                <label>
-                  <input id="ltce-highlight-favorite" class="ltce-checkbox" type="checkbox"
-                    ${cfg.highlight.favorite ? "checked" : ""}>
-                  Podświetl moją drużynę
-                </label>
-                <div class="ltce-note">
-                  Moja drużyna = wiersz o pozycji <code>my_position</code> z sensora.
-                </div>
-              </div>
-
-              <div class="ltce-field">
-                <label>TOP – ile pierwszych drużyn podświetlić</label>
-                <input id="ltce-highlight-top-count" class="ltce-number" type="number"
-                  min="0" max="10" step="1" value="${cfg.highlight.top_count}">
-              </div>
-
-              <div class="ltce-field">
-                <label>SPADKOWE – ile ostatnich drużyn podświetlić</label>
-                <input id="ltce-highlight-bottom-count" class="ltce-number" type="number"
-                  min="0" max="10" step="1" value="${cfg.highlight.bottom_count}">
-              </div>
-
-              <div class="ltce-field">
-                <label>Kolor mojej drużyny</label>
-                <input id="ltce-highlight-favorite-color" class="ltce-color"
-                  type="color" value="${cfg.highlight.favorite_color}">
-              </div>
-
-              <div class="ltce-field">
-                <label>Kolor TOP</label>
-                <input id="ltce-highlight-top-color" class="ltce-color"
-                  type="color" value="${cfg.highlight.top_color}">
-              </div>
-
-              <div class="ltce-field">
-                <label>Kolor SPADKOWE</label>
-                <input id="ltce-highlight-bottom-color" class="ltce-color"
-                  type="color" value="${cfg.highlight.bottom_color}">
-              </div>
-
-            </div>
-          </div>
-
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.lite_mode === true}"
+              @change="${e => this._update('lite_mode', e.target.checked)}">
+            </ha-switch>
+            Tryb LITE
+          </label>
         </div>
-      `;
+      </details>
 
-      // POWIĄZANIA
+      <!-- FILL MODE -->
+      <details class="group">
+        <summary>Styl wypełnienia</summary>
+        <div>
+          <label>
+            Tryb
+            <select @change="${e => this._update('fill_mode', e.target.value)}">
+              <option value="gradient" ${c.fill_mode === "gradient" ? "selected" : ""}>Gradient</option>
+              <option value="zebra" ${c.fill_mode === "zebra" ? "selected" : ""}>Zebra</option>
+              <option value="clear" ${c.fill_mode === "clear" ? "selected" : ""}>Brak</option>
+            </select>
+          </label>
 
-      // podstawy
-      this._bindInput("#ltce-entity", "entity", (v) => v);
-      this._bindInput("#ltce-name", "name", (v) => v);
-      this._bindCheckbox("#ltce-show-name", "show_name");
-      this._bindCheckbox("#ltce-lite-mode", "lite_mode");
-      this._bindCheckbox("#ltce-show-trend", "show_trend");
+          ${c.fill_mode === "gradient" ? `
+            <label>
+              Start (%)
+              <input type="number" min="0" max="100" value="${c.gradient?.start ?? 35}"
+                     @input="${e => this._update('gradient', {...c.gradient, start: Number(e.target.value)})}">
+            </label>
 
-      // fonty
-      this._bindInput(
-        "#ltce-font-header",
-        "font_size.header",
-        (v) => parseFloat(v || "0")
-      );
-      this._bindInput(
-        "#ltce-font-row",
-        "font_size.row",
-        (v) => parseFloat(v || "0")
-      );
-      this._bindInput(
-        "#ltce-font-team",
-        "font_size.team",
-        (v) => parseFloat(v || "0")
-      );
+            <label>
+              Koniec (%)
+              <input type="number" min="0" max="100" value="${c.gradient?.end ?? 100}"
+                     @input="${e => this._update('gradient', {...c.gradient, end: Number(e.target.value)})}">
+            </label>
 
-      // highlight
-      this._bindCheckbox("#ltce-highlight-favorite", "highlight.favorite");
-      this._bindInput(
-        "#ltce-highlight-top-count",
-        "highlight.top_count",
-        (v) => parseInt(v || "0", 10)
-      );
-      this._bindInput(
-        "#ltce-highlight-bottom-count",
-        "highlight.bottom_count",
-        (v) => parseInt(v || "0", 10)
-      );
-      this._bindInput(
-        "#ltce-highlight-favorite-color",
-        "highlight.favorite_color",
-        (v) => v
-      );
-      this._bindInput(
-        "#ltce-highlight-top-color",
-        "highlight.top_color",
-        (v) => v
-      );
-      this._bindInput(
-        "#ltce-highlight-bottom-color",
-        "highlight.bottom_color",
-        (v) => v
-      );
-    }
+            <label>
+              Alfa start
+              <input type="number" min="0" max="1" step="0.05"
+                     value="${c.gradient?.alpha_start ?? 0}"
+                     @input="${e => this._update('gradient', {...c.gradient, alpha_start: Number(e.target.value)})}">
+            </label>
+
+            <label>
+              Alfa koniec
+              <input type="number" min="0" max="1" step="0.05"
+                     value="${c.gradient?.alpha_end ?? 0.55}"
+                     @input="${e => this._update('gradient', {...c.gradient, alpha_end: Number(e.target.value)})}">
+            </label>
+          ` : ""}
+
+          ${c.fill_mode === "zebra" ? `
+            <label>
+              Kolor zebry
+              <input type="color"
+                     value="${c.zebra_color ?? "#f0f0f0"}"
+                     @input="${e => this._update('zebra_color', e.target.value)}">
+            </label>
+
+            <label>
+              Alfa zebry
+              <input type="number" min="0" max="1" step="0.05"
+                     value="${c.zebra_alpha ?? 0.4}"
+                     @input="${e => this._update('zebra_alpha', Number(e.target.value))}">
+            </label>
+          ` : ""}
+        </div>
+      </details>
+
+      <!-- FONTS -->
+      <details class="group">
+        <summary>Rozmiary czcionek</summary>
+        <div>
+          <label>
+            Data
+            <input type="number" step="0.1" value="${c.font_size?.date ?? 0.9}"
+                   @input="${e => this._update('font_size', {...c.font_size, date: Number(e.target.value)})}">
+          </label>
+
+          <label>
+            Status
+            <input type="number" step="0.1" value="${c.font_size?.status ?? 0.8}"
+                   @input="${e => this._update('font_size', {...c.font_size, status: Number(e.target.value)})}">
+          </label>
+
+          <label>
+            Drużyny
+            <input type="number" step="0.1" value="${c.font_size?.teams ?? 1.0}"
+                   @input="${e => this._update('font_size', {...c.font_size, teams: Number(e.target.value)})}">
+          </label>
+
+          <label>
+            Wynik
+            <input type="number" step="0.1" value="${c.font_size?.score ?? 1.0}"
+                   @input="${e => this._update('font_size', {...c.font_size, score: Number(e.target.value)})}">
+          </label>
+        </div>
+      </details>
+
+      <!-- ICON SIZES -->
+      <details class="group">
+        <summary>Rozmiary ikon</summary>
+        <div>
+          <label>
+            Liga
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.league ?? 26}"
+                   @input="${e => this._update('icon_size', {...c.icon_size, league: Number(e.target.value)})}">
+          </label>
+
+          <label>
+            Herby
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.crest ?? 24}"
+                   @input="${e => this._update('icon_size', {...c.icon_size, crest: Number(e.target.value)})}">
+          </label>
+
+          <label>
+            W/D/L
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.result ?? 26}"
+                   @input="${e => this._update('icon_size', {...c.icon_size, result: Number(e.target.value)})}">
+          </label>
+        </div>
+      </details>
+
+      <!-- COLORS -->
+      <details class="group">
+        <summary>Kolory W / D / L</summary>
+        <div>
+          <label>
+            Wygrana (W)
+            <input type="color"
+                   value="${c.colors?.win ?? "#3ba55d"}"
+                   @input="${e => this._update('colors', {...c.colors, win: e.target.value})}">
+          </label>
+
+          <label>
+            Remis (D)
+            <input type="color"
+                   value="${c.colors?.draw ?? "#468cd2"}"
+                   @input="${e => this._update('colors', {...c.colors, draw: e.target.value})}">
+          </label>
+
+          <label>
+            Porażka (L)
+            <input type="color"
+                   value="${c.colors?.loss ?? "#e23b3b"}"
+                   @input="${e => this._update('colors', {...c.colors, loss: e.target.value})}">
+          </label>
+        </div>
+      </details>
+    `;
   }
 
-  if (!customElements.get("league-table-card-editor")) {
-    customElements.define("league-table-card-editor", LeagueTableCardEditor);
+  static get styles() {
+    return window.HAUIUtils?.styles ?? "";
   }
-})();
+}
+
+customElements.define("matches-card-editor", MatchesCardEditor);
