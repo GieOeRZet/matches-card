@@ -1,13 +1,11 @@
 // ============================================================================
-//  Matches Card (90minut) – v0.3.000 + FIXED STATUS (no undefined)
+//  Matches Card (90minut) – v0.3.000 (RESTORED BASE) + FIXES
 // ============================================================================
 
 class MatchesCard extends HTMLElement {
 
   setConfig(config) {
-    if (!config.entity) {
-      throw new Error("Entity is required");
-    }
+    if (!config.entity) throw new Error("Entity is required");
 
     this.config = {
       name: "90minut Matches",
@@ -34,19 +32,18 @@ class MatchesCard extends HTMLElement {
       colors: {
         win: config.colors?.win ?? "#3ba55d",
         draw: config.colors?.draw ?? "#468cd2",
-        loss: config.colors?.loss ?? "#e23b3b"
+        loss: config.colors?.loss ?? "#e23b3b",
       },
 
       gradient: {
         start: config.gradient?.start ?? 35,
-        end:   config.gradient?.end   ?? 100,
+        end: config.gradient?.end ?? 100,
         alpha_start: config.gradient?.alpha_start ?? 0.0,
-        alpha_end:   config.gradient?.alpha_end   ?? 0.55
+        alpha_end: config.gradient?.alpha_end ?? 0.55,
       },
 
       zebra_color: config.zebra_color ?? "#f0f0f0",
       zebra_alpha: config.zebra_alpha ?? 0.4,
-
       lite_mode: config.lite_mode ?? false,
 
       ...config
@@ -98,7 +95,9 @@ class MatchesCard extends HTMLElement {
         }
 
         .crest-cell {
-          gap:3px;
+          display:flex;
+          flex-direction:column;
+          gap:4px;
         }
 
         .league-cell {
@@ -131,9 +130,9 @@ class MatchesCard extends HTMLElement {
           width:${this.config.icon_size.result}px;
           height:${this.config.icon_size.result}px;
           display:flex;
-          align-items:center;
           justify-content:center;
-          color:#fff;
+          align-items:center;
+          color:white;
           font-weight:bold;
           margin:auto;
         }
@@ -165,13 +164,15 @@ class MatchesCard extends HTMLElement {
     const homeBold = m.result === "win" ? "bold" : m.result === "loss" ? "dim" : "";
     const awayBold = m.result === "loss" ? "bold" : m.result === "win" ? "dim" : "";
 
+    const statusStr = m.status || m.competition || "";
+
     return `
       <tr style="${this._gradient(m)}">
 
         <!-- DATA -->
         <td style="width:10%; text-align:center;">
           <div style="font-size:${this.config.font_size.date}rem">${m.date}</div>
-          <div style="font-size:${this.config.font_size.status}rem">${m.status ?? ""}</div>
+          <div style="font-size:${this.config.font_size.status}rem">${statusStr}</div>
         </td>
 
         <!-- LIGA -->
@@ -181,9 +182,9 @@ class MatchesCard extends HTMLElement {
 
         <!-- HERBY -->
         ${this.config.show_logos ? `
-          <td class="crest-cell dual-cell" style="width:10%;">
-            <img src="${m.logo_home}" height="${this.config.icon_size.crest}" />
-            <img src="${m.logo_away}" height="${this.config.icon_size.crest}" />
+          <td class="crest-cell" style="width:10%;">
+            <img src="${m.logo_home}" height="${this.config.icon_size.crest}">
+            <img src="${m.logo_away}" height="${this.config.icon_size.crest}">
           </td>
         ` : ""}
 
@@ -199,7 +200,7 @@ class MatchesCard extends HTMLElement {
           <div class="${awayBold}" style="font-size:${this.config.font_size.score}rem">${awayScore}</div>
         </td>
 
-        <!-- SYMBOL W/P/R -->
+        <!-- W/D/L -->
         <td class="result-cell" style="width:8%;">
           ${this.config.show_result_symbols && m.result ? `
             <div class="result-circle" style="background:${this.config.colors[m.result]}">
@@ -230,14 +231,14 @@ class MatchesCard extends HTMLElement {
 
   _league(code) {
     const file =
-      code === "L"  ? "ekstraklasa.png" :
+      code === "L" ? "ekstraklasa.png" :
       code === "PP" ? "puchar.png" :
       null;
 
     if (!file) return `<div>${code}</div>`;
 
     return `<img src="https://raw.githubusercontent.com/GieOeRZet/matches-card/main/logo/${file}"
-                height="${this.config.icon_size.league}" />`;
+                height="${this.config.icon_size.league}">`;
   }
 
   _rgba(hex, alpha) {
@@ -258,5 +259,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "matches-card",
   name: "Matches Card (90minut)",
-  description: "Karta pokazująca mecze z sensora 90minut.pl"
+  description: "Karta pokazująca mecze 90minut.pl"
 });
