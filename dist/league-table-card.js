@@ -1,21 +1,10 @@
 // ============================================================================
-//  League Table Card (90minut) – v0.1.000
+//  League Table Card (90minut) – v0.1.100 (stable)
 //  Author: GieOeRZet
-//  Dane z sensora: attributes.table[], my_position, my_points, my_goal_diff
-//  - Spójny layout z Matches Card
-//  - Podświetlenie: TOP / dół / moja drużyna
-//  - Ostatnia kolumna: TREND (opcjonalne pole "trend" w każdym wierszu)
-//  - Tryb LITE: bez <ha-card>, samo <table>
 // ============================================================================
 
 class LeagueTableCard extends HTMLElement {
   setConfig(config) {
-    if (!config.entity) {
-      throw new Error(
-        "Entity is required (np. sensor.90minut_gornik_zabrze_table)"
-      );
-    }
-
     const defaults = {
       name: "Tabela ligowa",
       show_name: true,
@@ -28,13 +17,18 @@ class LeagueTableCard extends HTMLElement {
         team: 1.0,
       },
 
+      // zgodne stylistycznie z Matches Card
+      colors: {
+        top: "#3ba55d",      // green (win)
+        conference: "#468cd2", // blue (draw)
+        bottom: "#e23b3b",     // red (loss)
+        favorite: "#fff7c2",   // light gold
+      },
+
       highlight: {
-        favorite: true,
-        top_count: 3,
+        top_count: 2,
+        conference_count: 2,
         bottom_count: 3,
-        favorite_color: "#fff8e1", // delikatny żółty
-        top_color: "#e8f5e9",      // delikatny zielony
-        bottom_color: "#ffebee",   // delikatny czerwony
       },
     };
 
@@ -42,23 +36,31 @@ class LeagueTableCard extends HTMLElement {
       ...defaults,
       ...config,
       font_size: { ...defaults.font_size, ...(config.font_size || {}) },
+      colors: { ...defaults.colors, ...(config.colors || {}) },
       highlight: { ...defaults.highlight, ...(config.highlight || {}) },
     };
 
-    this.entityId = config.entity;
+    this.entityId = this.config.entity;
+    if (this._hass) this._render();
   }
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
+    if (this.config) this._render();
   }
 
+  // -------------------------------------------------------
+  // RENDER
+  // -------------------------------------------------------
   _render() {
-    if (!this._hass || !this.entityId) return;
+    const hass = this._hass;
+    const cfg = this.config;
 
-    const stateObj = this._hass.states[this.entityId];
+    if (!hass || !this.entityId) return;
+
+    const stateObj = hass.states[this.entityId];
     if (!stateObj) {
-      this.innerHTML = "<ha-card>Błąd: encja nie istnieje.</ha-card>";
+      this.innerHTML = `<ha-card>Błąd: encja nie istnieje.</ha-card>`;
       return;
     }
 
@@ -67,31 +69,33 @@ class LeagueTableCard extends HTMLElement {
     const myPosAttr = stateObj.attributes.my_position;
     const myPosition = myPosAttr != null ? parseInt(myPosAttr, 10) : null;
 
-    const cfg = this.config;
-
     const style = `
       <style>
         .ltc-card {
           font-family: "Sofascore Sans", Arial, sans-serif;
         }
+
         table.ltc-table {
           width: 100%;
           border-collapse: collapse;
         }
+
         .ltc-table th,
         .ltc-table td {
           padding: 4px 6px;
-          border-bottom: 1px solid rgba(0,0,0,0.08);
+          border-bottom: 1px solid rgba(255,255,255,0.12);
           font-size: ${cfg.font_size.row}rem;
           text-align: center;
           vertical-align: middle;
           white-space: nowrap;
         }
+
         .ltc-table th {
           font-weight: 600;
           font-size: ${cfg.font_size.header}rem;
-          opacity: 0.8;
+          opacity: 0.85;
         }
+
         .ltc-col-pos   { width: 10%; text-align: right; }
         .ltc-col-team  { text-align: left; font-size: ${cfg.font_size.team}rem; }
         .ltc-col-m     { width: 8%;  }
@@ -100,14 +104,18 @@ class LeagueTableCard extends HTMLElement {
         .ltc-col-diff  { width: 10%; }
         .ltc-col-trend { width: 10%; }
 
+        /* Highlight colors */
         .ltc-row-favorite {
-          background-color: ${cfg.highlight.favorite_color};
+          background-color: ${cfg.colors.favorite};
         }
         .ltc-row-top {
-          background-color: ${cfg.highlight.top_color};
+          background-color: ${cfg.colors.top};
+        }
+        .ltc-row-conf {
+          background-color: ${cfg.colors.conference};
         }
         .ltc-row-bottom {
-          background-color: ${cfg.highlight.bottom_color};
+          background-color: ${cfg.colors.bottom};
         }
 
         .ltc-team-name {
@@ -115,23 +123,39 @@ class LeagueTableCard extends HTMLElement {
           text-overflow: ellipsis;
         }
 
-        .ltc-trend-up {
-          color: var(--success-color, #2e7d32);
+        .ltc-trend-up   { color: #2e7d32; }
+        .ltc-trend-down { color: #c62828; }
+        .ltc-trend-same { color: #808080; }
+
+        /* LEGEND */
+        .ltc-legend {
+          display:flex;
+          gap:18px;
+          margin-top:10px;
+          padding:4px 6px;
+          font-size:0.8rem;
+          opacity:0.9;
         }
-        .ltc-trend-down {
-          color: var(--error-color, #c62828);
+        .ltc-leg-item {
+          display:flex;
+          align-items:center;
+          gap:6px;
         }
-        .ltc-trend-same {
-          color: var(--secondary-text-color, #808080);
+        .ltc-leg-box {
+          width:14px;
+          height:14px;
+          border-radius:3px;
         }
       </style>
     `;
 
-    const rowsHTML = table
-      .map((row) => this._renderRow(row, myPosition, totalTeams))
-      .join("");
+    // ROWS
+    const rows = table.map((row) =>
+      this._renderRow(row, myPosition, totalTeams)
+    ).join("");
 
-    const headerHTML = `
+    // HEADER
+    const header = `
       <thead>
         <tr>
           <th class="ltc-col-pos">Poz</th>
@@ -140,38 +164,50 @@ class LeagueTableCard extends HTMLElement {
           <th class="ltc-col-pkt">Pkt</th>
           <th class="ltc-col-goals">Bramki</th>
           <th class="ltc-col-diff">+/-</th>
-          ${
-            this.config.show_trend
-              ? `<th class="ltc-col-trend">Trend</th>`
-              : ""
-          }
+          ${cfg.show_trend ? `<th class="ltc-col-trend">Trend</th>` : ""}
         </tr>
       </thead>
+    `;
+
+    const legend = `
+      <div class="ltc-legend">
+        <div class="ltc-leg-item">
+          <div class="ltc-leg-box" style="background:${cfg.colors.top}"></div>
+          Liga Mistrzów
+        </div>
+
+        <div class="ltc-leg-item">
+          <div class="ltc-leg-box" style="background:${cfg.colors.conference}"></div>
+          Liga Konferencji
+        </div>
+
+        <div class="ltc-leg-item">
+          <div class="ltc-leg-box" style="background:${cfg.colors.bottom}"></div>
+          Spadek
+        </div>
+      </div>
     `;
 
     const tableHTML = `
       ${style}
       <div class="ltc-card">
         <table class="ltc-table">
-          ${headerHTML}
-          <tbody>
-            ${rowsHTML}
-          </tbody>
+          ${header}
+          <tbody>${rows}</tbody>
         </table>
+        ${legend}
       </div>
     `;
 
-    if (this.config.lite_mode) {
+    if (cfg.lite_mode) {
       this.innerHTML = tableHTML;
       return;
     }
 
     const cardName =
-      this.config.show_name === false
+      cfg.show_name === false
         ? ""
-        : this.config.name ||
-          stateObj.attributes.friendly_name ||
-          "Tabela ligowa";
+        : cfg.name || stateObj.attributes.friendly_name || "Tabela ligowa";
 
     this.innerHTML = `
       ${style}
@@ -181,89 +217,57 @@ class LeagueTableCard extends HTMLElement {
     `;
   }
 
+  // -------------------------------------------------------
+  // ROW RENDER
+  // -------------------------------------------------------
   _renderRow(row, myPosition, totalTeams) {
     const cfg = this.config;
-    const pos = row.position ? parseInt(row.position, 10) : null;
+    const pos = parseInt(row.position, 10);
 
-    const isFavorite =
-      cfg.highlight.favorite && myPosition != null && pos === myPosition;
-    const isTop =
-      cfg.highlight.top_count > 0 &&
-      pos != null &&
-      pos >= 1 &&
-      pos <= cfg.highlight.top_count;
+    const isFav = myPosition && pos === myPosition;
+    const isTop = pos >= 1 && pos <= cfg.highlight.top_count;
+    const isConf =
+      pos > cfg.highlight.top_count &&
+      pos <= cfg.highlight.top_count + cfg.highlight.conference_count;
+
     const isBottom =
-      cfg.highlight.bottom_count > 0 &&
-      pos != null &&
-      totalTeams > 0 &&
       pos > totalTeams - cfg.highlight.bottom_count;
 
-    let rowClass = "";
-    if (isFavorite) {
-      rowClass = "ltc-row-favorite";
-    } else if (isTop) {
-      rowClass = "ltc-row-top";
-    } else if (isBottom) {
-      rowClass = "ltc-row-bottom";
-    }
+    let cls = "";
+    if (isFav) cls = "ltc-row-favorite";
+    else if (isTop) cls = "ltc-row-top";
+    else if (isConf) cls = "ltc-row-conf";
+    else if (isBottom) cls = "ltc-row-bottom";
 
-    const matches = row.matches ?? "-";
-    const points = row.points ?? "-";
-    const goals = row.goals ?? "-";
-
-    let diff = row.diff;
-    let diffStr = "-";
-    if (diff !== undefined && diff !== null && diff !== "") {
-      const n = typeof diff === "number" ? diff : parseInt(diff, 10);
-      if (!isNaN(n)) {
-        diffStr = (n > 0 ? "+" : "") + n;
-      } else {
-        diffStr = String(diff);
-      }
-    }
-
-    const teamName = row.team || "";
-
-    let trendHTML = "";
-    if (cfg.show_trend) {
-      trendHTML = this._renderTrend(row.trend);
-    }
+    const diff = row.diff;
+    const diffStr =
+      diff !== undefined && diff !== null && diff !== ""
+        ? (diff > 0 ? `+${diff}` : diff)
+        : "-";
 
     return `
-      <tr class="${rowClass}">
-        <td class="ltc-col-pos">${pos != null && !isNaN(pos) ? pos : ""}</td>
-        <td class="ltc-col-team">
-          <span class="ltc-team-name">${teamName}</span>
-        </td>
-        <td class="ltc-col-m">${matches}</td>
-        <td class="ltc-col-pkt">${points}</td>
-        <td class="ltc-col-goals">${goals}</td>
+      <tr class="${cls}">
+        <td class="ltc-col-pos">${pos}</td>
+        <td class="ltc-col-team"><span class="ltc-team-name">${row.team}</span></td>
+        <td class="ltc-col-m">${row.matches}</td>
+        <td class="ltc-col-pkt">${row.points}</td>
+        <td class="ltc-col-goals">${row.goals}</td>
         <td class="ltc-col-diff">${diffStr}</td>
         ${
-          cfg.show_trend
-            ? `<td class="ltc-col-trend">${trendHTML}</td>`
+          this.config.show_trend
+            ? `<td class="ltc-col-trend">${this._trend(row.trend)}</td>`
             : ""
         }
       </tr>
     `;
   }
 
-  _renderTrend(trend) {
-    if (!trend) return "";
-
-    const t = String(trend).toLowerCase().trim();
-
-    if (t === "up" || t === "+" || t === "↑" || t === "▲") {
-      return `<span class="ltc-trend-up">▲</span>`;
-    }
-    if (t === "down" || t === "-" || t === "↓" || t === "▼") {
-      return `<span class="ltc-trend-down">▼</span>`;
-    }
-    if (t === "same" || t === "0" || t === "=" || t === "→") {
-      return `<span class="ltc-trend-same">━</span>`;
-    }
-
-    return `<span>${trend}</span>`;
+  _trend(t) {
+    if (!t) return "";
+    t = String(t).trim().toLowerCase();
+    if (["up", "+", "↑"].includes(t)) return `<span class="ltc-trend-up">▲</span>`;
+    if (["down", "-", "↓"].includes(t)) return `<span class="ltc-trend-down">▼</span>`;
+    return `<span class="ltc-trend-same">━</span>`;
   }
 
   static getConfigElement() {
@@ -271,9 +275,7 @@ class LeagueTableCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return {
-      entity: "sensor.90minut_gornik_zabrze_table",
-    };
+    return { entity: "sensor.90minut_gornik_zabrze_table" };
   }
 
   getCardSize() {
@@ -281,13 +283,11 @@ class LeagueTableCard extends HTMLElement {
   }
 }
 
-if (!customElements.get("league-table-card")) {
-  customElements.define("league-table-card", LeagueTableCard);
-}
+customElements.define("league-table-card", LeagueTableCard);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "league-table-card",
   name: "League Table Card (90minut)",
-  description: "Tabela ligowa na podstawie sensora 90minut.pl",
+  description: "Tabela ligowa 90minut.pl – kolorowe strefy, legenda, tryb LITE",
 });
