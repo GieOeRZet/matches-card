@@ -1,4 +1,4 @@
-// Matches Cards Pack – version 0.3.109
+// Matches Cards Pack – version 0.3.110
 // Auto-generated from dist/
 
 // ===== FILE INCLUDED: dist/league-table-card-editor.js =====
@@ -366,7 +366,10 @@ window.customCards.push({
 });
 // ===== FILE INCLUDED: dist/matches-card-editor.js =====
 // ============================================================================
-//  Matches Card Editor – FIXED (value binding + working config-changed)
+//  Matches Card Editor – stable, full bidirectional config
+//  - debut: 700 ms
+//  - number inputs
+//  - accordion sections (no auto-collapse)
 // ============================================================================
 
 class MatchesCardEditor extends HTMLElement {
@@ -378,24 +381,56 @@ class MatchesCardEditor extends HTMLElement {
     this._debounce = null;
   }
 
+  // -----------------------------------
+  // SET CONFIG FROM YAML
+  // -----------------------------------
   setConfig(config) {
     this._config = JSON.parse(JSON.stringify(config));
     this.render();
   }
 
-  _debounceUpdate(key, value) {
-    this._config[key] = value;
-
-    clearTimeout(this._debounce);
-    this._debounce = setTimeout(() => {
-      this.dispatchEvent(
-        new CustomEvent("config-changed", {
-          detail: { config: this._config }
-        })
-      );
-    }, 700);
+  // -----------------------------------
+  // HA CALLS THIS TO PASS lovelace instance
+  // -----------------------------------
+  set hass(hass) {
+    this._hass = hass;
   }
 
+  // -----------------------------------
+  // DEBOUNCED UPDATER
+  // -----------------------------------
+  _update(path, value) {
+    const newConfig = JSON.parse(JSON.stringify(this._config));
+
+    // Inject deep key path with value (example: font_size.score)
+    const segments = path.split(".");
+    let ref = newConfig;
+    while (segments.length > 1) {
+      const k = segments.shift();
+      ref[k] = ref[k] ?? {};
+      ref = ref[k];
+    }
+    ref[segments[0]] = value;
+
+    this._config = newConfig;
+
+    clearTimeout(this._debounce);
+    this._debounce = setTimeout(() => this._commit(), 700);
+  }
+
+  _commit() {
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true
+      })
+    );
+  }
+
+  // -----------------------------------
+  // RENDER EDITOR UI
+  // -----------------------------------
   render() {
     if (!this.shadowRoot) return;
 
@@ -404,200 +439,302 @@ class MatchesCardEditor extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <style>
         .group {
-          margin: 12px 0;
-          border-radius: 8px;
           border: 1px solid rgba(255,255,255,0.15);
+          border-radius: 8px;
+          margin: 12px 0;
           overflow: hidden;
         }
         .group summary {
           padding: 10px 12px;
-          font-size: 1rem;
           cursor: pointer;
           background: rgba(255,255,255,0.05);
+          font-size: 1rem;
         }
-        .group > div {
-          padding: 10px 16px 18px 16px;
+        .group-content {
+          padding: 12px 16px 16px 16px;
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 12px;
         }
-        label { font-size: 0.85rem; display:flex; flex-direction:column; }
-        input[type="number"], input[type="text"] {
+        label {
+          display: flex;
+          flex-direction: column;
+          font-size: 0.85rem;
+          opacity: 0.85;
+        }
+        input[type="number"], input[type="text"], select {
           padding: 4px 6px;
+          background: rgba(0,0,0,0.20);
+          color: inherit;
           border-radius: 6px;
           border: 1px solid rgba(255,255,255,0.20);
-          background: rgba(0,0,0,0.2);
-          color: inherit;
+        }
+        input[type="color"] {
+          width: 40px;
+          height: 28px;
+          border-radius: 4px;
+        }
+        .switch {
+          display: flex;
+          align-items: center;
+          gap: 10px;
         }
       </style>
 
+      <!-- BASIC -->
       <details class="group" open>
         <summary>Podstawowe</summary>
-        <div>
+        <div class="group-content">
+
           <label>
             Nazwa karty
-            <input id="name" type="text" value="${c.name ?? ''}">
+            <input type="text"
+                   value="${c.name ?? ''}"
+                   @input="${e => this._update('name', e.target.value)}">
           </label>
 
-          <label>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.show_name !== false}"
+              @change="${e => this._update('show_name', e.target.checked)}">
+            </ha-switch>
+            Pokaż nagłówek
+          </label>
+
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.show_logos !== false}"
+              @change="${e => this._update('show_logos', e.target.checked)}">
+            </ha-switch>
             Pokaż herby
-            <ha-switch id="show_logos" ?checked="${c.show_logos !== false}"></ha-switch>
           </label>
 
-          <label>
-            Pełne nazwy
-            <ha-switch id="full_team_names" ?checked="${c.full_team_names !== false}"></ha-switch>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.full_team_names !== false}"
+              @change="${e => this._update('full_team_names', e.target.checked)}">
+            </ha-switch>
+            Pełne nazwy drużyn
           </label>
 
-          <label>
-            W/D/L symbole
-            <ha-switch id="show_result_symbols" ?checked="${c.show_result_symbols !== false}"></ha-switch>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.show_result_symbols !== false}"
+              @change="${e => this._update('show_result_symbols', e.target.checked)}">
+            </ha-switch>
+            Pokaż W/D/L
           </label>
 
-          <label>
-            Tryb LITE
-            <ha-switch id="lite_mode" ?checked="${c.lite_mode === true}"></ha-switch>
+          <label class="switch">
+            <ha-switch
+              ?checked="${c.lite_mode === true}"
+              @change="${e => this._update('lite_mode', e.target.checked)}">
+            </ha-switch>
+            Tryb LITE (bez ha-card)
           </label>
+
         </div>
       </details>
 
+      <!-- FILL MODE -->
       <details class="group">
-        <summary>Czcionki</summary>
-        <div>
+        <summary>Styl wypełnienia</summary>
+        <div class="group-content">
+
+          <label>
+            Mode
+            <select @change="${e => this._update('fill_mode', e.target.value)}">
+              <option value="gradient" ${c.fill_mode === "gradient" ? "selected" : ""}>Gradient</option>
+              <option value="zebra"    ${c.fill_mode === "zebra"    ? "selected" : ""}>Zebra</option>
+              <option value="clear"    ${c.fill_mode === "clear"    ? "selected" : ""}>Brak</option>
+            </select>
+          </label>
+
+          ${c.fill_mode === "gradient" ? `
+            <label>Start %
+              <input type="number" min="0" max="100"
+                     value="${c.gradient?.start ?? 35}"
+                     @input="${e => this._update('gradient.start', Number(e.target.value))}">
+            </label>
+
+            <label>Koniec %
+              <input type="number" min="0" max="100"
+                     value="${c.gradient?.end ?? 100}"
+                     @input="${e => this._update('gradient.end', Number(e.target.value))}">
+            </label>
+
+            <label>Alfa start
+              <input type="number" min="0" max="1" step="0.05"
+                     value="${c.gradient?.alpha_start ?? 0}"
+                     @input="${e => this._update('gradient.alpha_start', Number(e.target.value))}">
+            </label>
+
+            <label>Alfa koniec
+              <input type="number" min="0" max="1" step="0.05"
+                     value="${c.gradient?.alpha_end ?? 0.55}"
+                     @input="${e => this._update('gradient.alpha_end', Number(e.target.value))}">
+            </label>
+          ` : ""}
+
+          ${c.fill_mode === "zebra" ? `
+            <label>Kolor zebry
+              <input type="color"
+                     value="${c.zebra_color ?? "#f0f0f0"}"
+                     @input="${e => this._update('zebra_color', e.target.value)}">
+            </label>
+
+            <label>Alfa zebry
+              <input type="number" min="0" max="1" step="0.05"
+                     value="${c.zebra_alpha ?? 0.4}"
+                     @input="${e => this._update('zebra_alpha', Number(e.target.value))}">
+            </label>
+          ` : ""}
+        </div>
+      </details>
+
+      <!-- FONT SIZES -->
+      <details class="group">
+        <summary>Rozmiary czcionek</summary>
+        <div class="group-content">
+
           <label>Data
-            <input id="date" type="number" step="0.1" value="${c.font_size?.date ?? 0.9}">
+            <input type="number" step="0.1"
+                   value="${c.font_size?.date ?? 0.9}"
+                   @input="${e => this._update('font_size.date', Number(e.target.value))}">
           </label>
 
           <label>Status
-            <input id="status" type="number" step="0.1" value="${c.font_size?.status ?? 0.8}">
+            <input type="number" step="0.1"
+                   value="${c.font_size?.status ?? 0.8}"
+                   @input="${e => this._update('font_size.status', Number(e.target.value))}">
           </label>
 
           <label>Drużyny
-            <input id="teams" type="number" step="0.1" value="${c.font_size?.teams ?? 1.0}">
+            <input type="number" step="0.1"
+                   value="${c.font_size?.teams ?? 1.0}"
+                   @input="${e => this._update('font_size.teams', Number(e.target.value))}">
           </label>
 
           <label>Wynik
-            <input id="score" type="number" step="0.1" value="${c.font_size?.score ?? 1.0}">
+            <input type="number" step="0.1"
+                   value="${c.font_size?.score ?? 1.0}"
+                   @input="${e => this._update('font_size.score', Number(e.target.value))}">
           </label>
+
         </div>
       </details>
 
+      <!-- ICON SIZES -->
       <details class="group">
-        <summary>Ikony</summary>
-        <div>
+        <summary>Rozmiary ikon</summary>
+        <div class="group-content">
+
           <label>Liga
-            <input id="league" type="number" value="${c.icon_size?.league ?? 26}">
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.league ?? 26}"
+                   @input="${e => this._update('icon_size.league', Number(e.target.value))}">
           </label>
+
           <label>Herby
-            <input id="crest" type="number" value="${c.icon_size?.crest ?? 24}">
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.crest ?? 24}"
+                   @input="${e => this._update('icon_size.crest', Number(e.target.value))}">
           </label>
+
           <label>W/D/L
-            <input id="result" type="number" value="${c.icon_size?.result ?? 26}">
+            <input type="number" min="10" max="60"
+                   value="${c.icon_size?.result ?? 26}"
+                   @input="${e => this._update('icon_size.result', Number(e.target.value))}">
           </label>
+
+        </div>
+      </details>
+
+      <!-- COLORS -->
+      <details class="group">
+        <summary>Kolory W / D / L</summary>
+        <div class="group-content">
+
+          <label>Wygrana (W)
+            <input type="color"
+                   value="${c.colors?.win ?? "#3ba55d"}"
+                   @input="${e => this._update('colors.win', e.target.value)}">
+          </label>
+
+          <label>Remis (D)
+            <input type="color"
+                   value="${c.colors?.draw ?? "#468cd2"}"
+                   @input="${e => this._update('colors.draw', e.target.value)}">
+          </label>
+
+          <label>Porażka (L)
+            <input type="color"
+                   value="${c.colors?.loss ?? "#e23b3b"}"
+                   @input="${e => this._update('colors.loss', e.target.value)}">
+          </label>
+
         </div>
       </details>
     `;
-
-    // ===============================
-    //  BIND INPUTS → CONFIG
-    // ===============================
-    const bind = (id, key, nested = null) => {
-      const el = this.shadowRoot.getElementById(id);
-      if (!el) return;
-
-      el.addEventListener("input", (e) => {
-        if (nested) {
-          this._config[nested][key] = Number(e.target.value);
-          this._debounceUpdate(nested, { ...this._config[nested] });
-        } else {
-          this._debounceUpdate(key, e.target.type === "number"
-            ? Number(e.target.value)
-            : e.target.value);
-        }
-      });
-
-      el.addEventListener("change", (e) => {
-        if (nested) {
-          this._config[nested][key] = Number(e.target.value);
-          this._debounceUpdate(nested, { ...this._config[nested] });
-        } else {
-          this._debounceUpdate(key, e.target.checked ?? e.target.value);
-        }
-      });
-    };
-
-    // PODSTAWOWE
-    bind("name", "name");
-    bind("show_logos", "show_logos");
-    bind("full_team_names", "full_team_names");
-    bind("show_result_symbols", "show_result_symbols");
-    bind("lite_mode", "lite_mode");
-
-    // FONTS
-    bind("date", "date", "font_size");
-    bind("status", "status", "font_size");
-    bind("teams", "teams", "font_size");
-    bind("score", "score", "font_size");
-
-    // ICONS
-    bind("league", "league", "icon_size");
-    bind("crest", "crest", "icon_size");
-    bind("result", "result", "icon_size");
   }
-
-  static getConfigElement() { return this; }
-  static getStubConfig() { return {}; }
 }
 
 customElements.define("matches-card-editor", MatchesCardEditor);
 // ===== FILE INCLUDED: dist/matches-card.js =====
 // ============================================================================
-//  Matches Card (90minut) – v0.3.000 (RESTORED BASE) + FIXES
+//  Matches Card (90minut) – v0.3.000 RESTORED + FIX 1-5
+//  - Data + KONIEC/godzina (bez competition!)
+//  - Herby jak w 0.3.000 z odstępem
+//  - Wynik wyrównany do drużyn
+//  - Kolumna W/D/L osobno
+//  - Tryb LITE
 // ============================================================================
 
 class MatchesCard extends HTMLElement {
 
   setConfig(config) {
-    if (!config.entity) throw new Error("Entity is required");
+    if (!config.entity) {
+      throw new Error("Entity is required");
+    }
 
     this.config = {
-      name: "90minut Matches",
-      show_name: true,
-      show_logos: true,
-      full_team_names: true,
-      show_result_symbols: true,
+      name: config.name ?? "90minut Matches",
+      show_name: config.show_name ?? true,
+      show_logos: config.show_logos ?? true,
+      full_team_names: config.full_team_names ?? true,
+      show_result_symbols: config.show_result_symbols ?? true,
+      lite_mode: config.lite_mode ?? false,
 
-      fill_mode: config.fill_mode || "gradient",
+      fill_mode: config.fill_mode ?? "gradient",
 
       font_size: {
-        date: config.font_size?.date ?? 0.9,
+        date:   config.font_size?.date   ?? 0.9,
         status: config.font_size?.status ?? 0.8,
-        teams: config.font_size?.teams ?? 1.0,
-        score: config.font_size?.score ?? 1.0,
+        teams:  config.font_size?.teams  ?? 1.0,
+        score:  config.font_size?.score  ?? 1.0
       },
 
       icon_size: {
         league: config.icon_size?.league ?? 26,
-        crest: config.icon_size?.crest ?? 24,
-        result: config.icon_size?.result ?? 26,
+        crest:  config.icon_size?.crest  ?? 24,
+        result: config.icon_size?.result ?? 26
       },
 
       colors: {
-        win: config.colors?.win ?? "#3ba55d",
+        win:  config.colors?.win  ?? "#3ba55d",
         draw: config.colors?.draw ?? "#468cd2",
         loss: config.colors?.loss ?? "#e23b3b",
       },
 
       gradient: {
-        start: config.gradient?.start ?? 35,
-        end: config.gradient?.end ?? 100,
+        start:       config.gradient?.start       ?? 35,
+        end:         config.gradient?.end         ?? 100,
         alpha_start: config.gradient?.alpha_start ?? 0.0,
-        alpha_end: config.gradient?.alpha_end ?? 0.55,
+        alpha_end:   config.gradient?.alpha_end   ?? 0.55
       },
 
       zebra_color: config.zebra_color ?? "#f0f0f0",
       zebra_alpha: config.zebra_alpha ?? 0.4,
-      lite_mode: config.lite_mode ?? false,
 
       ...config
     };
@@ -605,8 +742,8 @@ class MatchesCard extends HTMLElement {
 
   set hass(hass) {
     this._hass = hass;
-
     const entity = hass.states[this.config.entity];
+
     if (!entity) {
       this.innerHTML = "<ha-card>Encja nie istnieje.</ha-card>";
       return;
@@ -616,55 +753,32 @@ class MatchesCard extends HTMLElement {
 
     const zebraCSS =
       this.config.fill_mode === "zebra"
-        ? `tr:nth-child(even){background-color:${this._rgba(this.config.zebra_color, this.config.zebra_alpha)};}`
+        ? `tr:nth-child(even) { background-color:${this._rgba(this.config.zebra_color, this.config.zebra_alpha)}; }`
         : "";
 
     const style = `
       <style>
         ha-card {
-          padding:10px 0;
-          font-family: Arial, sans-serif;
+          padding: 10px 0;
+          font-family: "Sofascore Sans", Arial, sans-serif;
         }
+        table { width:100%; border-collapse:collapse; }
+        tr { border-bottom:1px solid rgba(255,255,255,0.08); }
+        td { padding:4px 6px; vertical-align:middle; }
 
-        table {
-          width:100%;
-          border-collapse:collapse;
-        }
-
-        tr {
-          border-bottom:1px solid rgba(0,0,0,0.1);
-        }
-
-        td {
-          padding:4px 6px;
-          vertical-align:middle;
-        }
-
-        .dual-cell {
+        .dual {
           display:flex;
           flex-direction:column;
           justify-content:center;
           align-items:center;
+          gap:3px; /* odstęp między herbami */
         }
 
-        .crest-cell {
-          display:flex;
-          flex-direction:column;
-          gap:4px;
-        }
+        .league-cell { padding-right:12px; }
 
-        .league-cell {
-          padding-right:12px;
-        }
+        .team-cell { text-align:left; padding-left:6px; }
 
-        .team-cell {
-          text-align:left;
-          padding-left:8px;
-        }
-
-        .team-row {
-          line-height:1.3em;
-        }
+        .team-row { line-height:1.3em; }
 
         .score-cell {
           display:flex;
@@ -674,19 +788,15 @@ class MatchesCard extends HTMLElement {
           line-height:1.3em;
         }
 
-        .result-cell {
-          text-align:center;
-        }
-
         .result-circle {
-          border-radius:50%;
           width:${this.config.icon_size.result}px;
           height:${this.config.icon_size.result}px;
+          border-radius:50%;
           display:flex;
-          justify-content:center;
           align-items:center;
-          color:white;
+          justify-content:center;
           font-weight:bold;
+          color:#fff;
           margin:auto;
         }
 
@@ -694,7 +804,7 @@ class MatchesCard extends HTMLElement {
       </style>
     `;
 
-    const rows = matches.map(m => this._row(m)).join("");
+    const rows = matches.map((m) => this._row(m)).join("");
 
     if (this.config.lite_mode) {
       this.innerHTML = `${style}<table>${rows}</table>`;
@@ -712,58 +822,93 @@ class MatchesCard extends HTMLElement {
   }
 
   _row(m) {
-    const [homeScore, awayScore] = (m.score || "-").split("-");
 
-    const homeBold = m.result === "win" ? "bold" : m.result === "loss" ? "dim" : "";
-    const awayBold = m.result === "loss" ? "bold" : m.result === "win" ? "dim" : "";
+    // DATA
+    const dateStr = m.date || "-";
 
-    const statusStr = m.status || m.competition || "";
+    // STATUS: KONIEC / godzina
+    let status = "";
+    if (m.finished === true) status = "KONIEC";
+    else if (m.finished === false && m.date) {
+      const t = m.date.split(" ")[1];
+      status = t ?? "";
+    }
+
+    // SCORE
+    let [home, away] = (m.score || "-").split("-");
+    home = home ?? "";
+    away = away ?? "";
+
+    // BOLD logic
+    const homeBold =
+      m.result === "win" ? "font-weight:600" :
+      m.result === "loss" ? "opacity:0.6" : "";
+
+    const awayBold =
+      m.result === "loss" ? "font-weight:600" :
+      m.result === "win" ? "opacity:0.6" : "";
 
     return `
       <tr style="${this._gradient(m)}">
 
-        <!-- DATA -->
-        <td style="width:10%; text-align:center;">
-          <div style="font-size:${this.config.font_size.date}rem">${m.date}</div>
-          <div style="font-size:${this.config.font_size.status}rem">${statusStr}</div>
+        <!-- DATA + STATUS -->
+        <td style="width:11%; text-align:center;">
+          <div style="font-size:${this.config.font_size.date}rem">${dateStr}</div>
+          <div style="font-size:${this.config.font_size.status}rem">${status}</div>
         </td>
 
         <!-- LIGA -->
-        <td class="league-cell" style="width:10%; text-align:center;">
+        <td class="league-cell" style="width:9%; text-align:center;">
           ${this._league(m.league)}
         </td>
 
         <!-- HERBY -->
         ${this.config.show_logos ? `
-          <td class="crest-cell" style="width:10%;">
-            <img src="${m.logo_home}" height="${this.config.icon_size.crest}">
-            <img src="${m.logo_away}" height="${this.config.icon_size.crest}">
+          <td style="width:10%;">
+            <div class="dual">
+              <img src="${m.logo_home}" height="${this.config.icon_size.crest}">
+              <img src="${m.logo_away}" height="${this.config.icon_size.crest}">
+            </div>
           </td>
         ` : ""}
 
-        <!-- DRUŻYNY -->
+        <!-- NAZWY DRUŻYN -->
         <td class="team-cell">
-          <div class="team-row ${homeBold}" style="font-size:${this.config.font_size.teams}rem">${m.home}</div>
-          <div class="team-row ${awayBold}" style="font-size:${this.config.font_size.teams}rem">${m.away}</div>
+          <div class="team-row" style="${homeBold}; font-size:${this.config.font_size.teams}rem">${m.home}</div>
+          <div class="team-row" style="${awayBold}; font-size:${this.config.font_size.teams}rem">${m.away}</div>
         </td>
 
         <!-- WYNIK -->
-        <td class="score-cell" style="width:10%;">
-          <div class="${homeBold}" style="font-size:${this.config.font_size.score}rem">${homeScore}</div>
-          <div class="${awayBold}" style="font-size:${this.config.font_size.score}rem">${awayScore}</div>
+        <td class="score-cell" style="width:8%;">
+          <div style="${homeBold}; font-size:${this.config.font_size.score}rem">${home}</div>
+          <div style="${awayBold}; font-size:${this.config.font_size.score}rem">${away}</div>
         </td>
 
         <!-- W/D/L -->
-        <td class="result-cell" style="width:8%;">
-          ${this.config.show_result_symbols && m.result ? `
-            <div class="result-circle" style="background:${this.config.colors[m.result]}">
-              ${m.result.charAt(0).toUpperCase()}
-            </div>
-          ` : ""}
+        <td style="width:6%; text-align:center;">
+          ${
+            this.config.show_result_symbols && m.result
+              ? `<div class="result-circle" style="background:${this.config.colors[m.result]}">
+                   ${m.result.charAt(0).toUpperCase()}
+                 </div>`
+              : ""
+          }
         </td>
 
       </tr>
     `;
+  }
+
+  _league(code) {
+    const file =
+      code === "L"  ? "ekstraklasa.png" :
+      code === "PP" ? "puchar.png" :
+      null;
+
+    if (!file) return `<div>${code}</div>`;
+
+    return `<img src="https://raw.githubusercontent.com/GieOeRZet/matches-card/main/logo/${file}"
+                height="${this.config.icon_size.league}">`;
   }
 
   _gradient(m) {
@@ -776,30 +921,18 @@ class MatchesCard extends HTMLElement {
       background: linear-gradient(to right,
         rgba(0,0,0,0) 0%,
         ${this._rgba(c, g.alpha_start)} ${g.start}%,
-        ${this._rgba(c, g.alpha_end)} ${g.end}%,
+        ${this._rgba(c, g.alpha_end)}   ${g.end}%,
         rgba(0,0,0,0) 100%
       );
     `;
   }
 
-  _league(code) {
-    const file =
-      code === "L" ? "ekstraklasa.png" :
-      code === "PP" ? "puchar.png" :
-      null;
-
-    if (!file) return `<div>${code}</div>`;
-
-    return `<img src="https://raw.githubusercontent.com/GieOeRZet/matches-card/main/logo/${file}"
-                height="${this.config.icon_size.league}">`;
-  }
-
-  _rgba(hex, alpha) {
+  _rgba(hex, a) {
     const h = hex.replace("#", "");
     const r = parseInt(h.substr(0,2),16);
     const g = parseInt(h.substr(2,2),16);
     const b = parseInt(h.substr(4,2),16);
-    return `rgba(${r},${g},${b},${alpha})`;
+    return `rgba(${r},${g},${b},${a})`;
   }
 
   static getConfigElement() { return document.createElement("matches-card-editor"); }
@@ -812,5 +945,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "matches-card",
   name: "Matches Card (90minut)",
-  description: "Karta pokazująca mecze 90minut.pl"
+  description: "Karta pokazująca mecze z sensora 90minut.pl"
 });
