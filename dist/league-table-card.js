@@ -1,203 +1,359 @@
 // ============================================================================
-//  League Table Card (90minut) – stable version (layout = OK)
-//  Author: GieOeRZet
-//  - Spójny layout z Matches Card
-//  - Podświetlenie: ulubiona / LM / LK / spadek
-//  - Legenda pod tabelą: kolorek + opis (LM / LK / Spadek)
-//  - YAML → karta w pełni działa
+//  League Table Card (90minut) – v0.1.100
+//  - Gradient / Zebra jak w Matches Card
+//  - Domyślne kolory jak w meczach:
+//      top  (LM)   => #3ba55d
+//      conf (LKE)  => #468cd2
+//      bottom (sp) => #e23b3b
+//  - Moja drużyna: pogrubiona nazwa (bez specjalnego tła)
+//  - Legenda na dole (kolorowy kwadracik + opis)
+//  - Tryb LITE (bez ha-card, samo <table> + legenda)
 // ============================================================================
 
 class LeagueTableCard extends HTMLElement {
-
   setConfig(config) {
-    if (!config.entity) throw new Error("Entity is required");
+    if (!config.entity) {
+      throw new Error(
+        "Entity is required (np. sensor.90minut_gornik_zabrze_table)"
+      );
+    }
 
-    this.defaultConfig = {
+    const defaults = {
       name: "Tabela ligowa",
       show_name: true,
       lite_mode: false,
 
-      font_size: {
-        header: 0.8,
-        row: 0.9,
-        team: 1.0,
+      // Gradient / Zebra – analogicznie do Matches Card
+      fill_mode: "gradient", // 'gradient' | 'zebra' | 'clear'
+      gradient: {
+        start: 35,
+        end: 100,
+        alpha_start: 0.0,
+        alpha_end: 0.55,
       },
+      zebra_color: "#f0f0f0",
+      zebra_alpha: 0.4,
 
+      // Pozycje i kolory (LM / LKE / Spadek)
       highlight: {
-        favorite: true,
         top_count: 2,
         conf_count: 2,
         bottom_count: 3,
+      },
 
-        favorite_color: "#fff8e1",
-        top_color: "#e8f5e9",
-        conf_color: "#e3f2fd",
-        bottom_color: "#ffebee",
-        alpha: 0.55
-      }
+      colors: {
+        top: "#3ba55d", // Liga Mistrzów
+        conf: "#468cd2", // Liga Konferencji
+        bottom: "#e23b3b", // Spadek
+      },
     };
 
-    this.config = this._mergeDeep(this.defaultConfig, config);
+    this.config = {
+      ...defaults,
+      ...config,
+      gradient: { ...defaults.gradient, ...(config.gradient || {}) },
+      highlight: { ...defaults.highlight, ...(config.highlight || {}) },
+      colors: { ...defaults.colors, ...(config.colors || {}) },
+    };
+
     this.entityId = config.entity;
   }
 
   set hass(hass) {
     this._hass = hass;
-    if (!this._hass.states[this.entityId]) {
-      this.innerHTML = "<ha-card>Encja nie istnieje.</ha-card>";
-      return;
-    }
     this._render();
   }
 
-  // --------------------------
-  // Deep merge helper
-  // --------------------------
-  _mergeDeep(base, extra) {
-    const out = {};
-    const keys = new Set([...Object.keys(base), ...Object.keys(extra || {})]);
-    keys.forEach(k => {
-      const bv = base[k];
-      const ev = extra ? extra[k] : undefined;
-      if (typeof bv === "object" && !Array.isArray(bv)) {
-        out[k] = this._mergeDeep(bv, ev || {});
-      } else {
-        out[k] = ev !== undefined ? ev : bv;
-      }
-    });
-    return out;
-  }
-
-  // --------------------------
-  // RENDER
-  // --------------------------
   _render() {
-    const entity = this._hass.states[this.entityId];
-    const table = entity.attributes.table || [];
-    const myPos = parseInt(entity.attributes.my_position || "0", 10);
-    const total = table.length;
+    if (!this._hass || !this.entityId) return;
 
-    const c = this.config;
+    const stateObj = this._hass.states[this.entityId];
+    if (!stateObj) {
+      this.innerHTML = "<ha-card>Błąd: encja nie istnieje.</ha-card>";
+      return;
+    }
+
+    const table = stateObj.attributes.table || [];
+    const totalTeams = table.length || 0;
+
+    const myPosAttr = stateObj.attributes.my_position;
+    this._myPosition =
+      myPosAttr != null && myPosAttr !== ""
+        ? parseInt(myPosAttr, 10)
+        : null;
+
+    const cfg = this.config;
 
     const style = `
       <style>
-        .lt-card {
+        .ltc-card {
           font-family: "Sofascore Sans", Arial, sans-serif;
         }
-        table {
+
+        table.ltc-table {
           width: 100%;
           border-collapse: collapse;
         }
-        th, td {
-          border-bottom: 1px solid rgba(0,0,0,0.1);
+
+        .ltc-table th,
+        .ltc-table td {
           padding: 4px 6px;
-          font-size: ${c.font_size.row}rem;
-          white-space: nowrap;
+          border-bottom: 1px solid rgba(0,0,0,0.08);
+          font-size: 0.9rem;
           text-align: center;
+          vertical-align: middle;
+          white-space: nowrap;
         }
-        th {
+
+        .ltc-table th {
           font-weight: 600;
-          font-size: ${c.font_size.header}rem;
+          font-size: 0.8rem;
           opacity: 0.8;
         }
-        .team-col {
-          text-align: left;
-          font-size: ${c.font_size.team}rem;
+
+        .ltc-col-pos   { width: 8%;  text-align: right; }
+        .ltc-col-team  { text-align: left; }
+        .ltc-col-m     { width: 8%;  }
+        .ltc-col-pkt   { width: 10%; font-weight: 600; }
+        .ltc-col-goals { width: 14%; }
+        .ltc-col-diff  { width: 10%; }
+
+        .ltc-team-name {
+          overflow: hidden;
+          text-overflow: ellipsis;
         }
 
-        .fav { background: ${this._rgba(c.highlight.favorite_color, c.highlight.alpha)}; }
-        .lm  { background: ${this._rgba(c.highlight.top_color, c.highlight.alpha)}; }
-        .lk  { background: ${this._rgba(c.highlight.conf_color, c.highlight.alpha)}; }
-        .sp  { background: ${this._rgba(c.highlight.bottom_color, c.highlight.alpha)}; }
+        .ltc-team-fav {
+          font-weight: 700;
+        }
 
-        .legend { margin-top: 10px; font-size: 0.75rem; opacity:0.85; display:flex; gap:20px; }
-        .lg-item { display:flex; align-items:center; gap:6px; }
-        .lg-box  { width:14px; height:14px; border-radius:3px; }
+        .ltc-legend {
+          margin-top: 10px;
+          padding-top: 6px;
+          border-top: 1px solid rgba(0,0,0,0.08);
+          display: flex;
+          flex-wrap: wrap;
+          gap: 16px;
+          font-size: 0.8rem;
+          align-items: center;
+        }
+
+        .ltc-legend-item {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+        }
+
+        .ltc-legend-box {
+          width: 12px;
+          height: 12px;
+          border-radius: 3px;
+          border: 1px solid rgba(0,0,0,0.25);
+        }
       </style>
     `;
 
-    const header = `
+    const rowsHTML = table
+      .map((row, index) =>
+        this._renderRow(row, index, totalTeams)
+      )
+      .join("");
+
+    const headerHTML = `
       <thead>
         <tr>
-          <th>Poz</th>
-          <th class="team-col">Drużyna</th>
-          <th>M</th>
-          <th>Pkt</th>
-          <th>Bramki</th>
-          <th>+/-</th>
+          <th class="ltc-col-pos">Poz</th>
+          <th class="ltc-col-team">Drużyna</th>
+          <th class="ltc-col-m">M</th>
+          <th class="ltc-col-pkt">Pkt</th>
+          <th class="ltc-col-goals">Bramki</th>
+          <th class="ltc-col-diff">+/-</th>
         </tr>
       </thead>
     `;
 
-    const rows = table.map(row => {
-      const pos = parseInt(row.position || "0", 10);
-      const diff = row.diff >= 0 ? "+" + row.diff : row.diff;
-
-      let cls = "";
-      if (c.highlight.favorite && pos === myPos) cls = "fav";
-      else if (pos <= c.highlight.top_count) cls = "lm";
-      else if (pos > c.highlight.top_count && pos <= c.highlight.top_count + c.highlight.conf_count) cls = "lk";
-      else if (pos > total - c.highlight.bottom_count) cls = "sp";
-
-      return `
-        <tr class="${cls}">
-          <td>${pos}</td>
-          <td class="team-col">${row.team}</td>
-          <td>${row.matches}</td>
-          <td>${row.points}</td>
-          <td>${row.goals}</td>
-          <td>${diff}</td>
-        </tr>
-      `;
-    }).join("");
-
-    const legend = `
-      <div class="legend">
-        <div class="lg-item">
-          <div class="lg-box" style="background:${this._rgba(c.highlight.top_color, c.highlight.alpha)}"></div>
-          Liga Mistrzów
+    const legendHTML = `
+      <div class="ltc-legend">
+        <div class="ltc-legend-item">
+          <span class="ltc-legend-box" style="background:${cfg.colors.top};"></span>
+          <span>Liga Mistrzów</span>
         </div>
-        <div class="lg-item">
-          <div class="lg-box" style="background:${this._rgba(c.highlight.conf_color, c.highlight.alpha)}"></div>
-          Liga Konferencji
+        <div class="ltc-legend-item">
+          <span class="ltc-legend-box" style="background:${cfg.colors.conf};"></span>
+          <span>Liga Konferencji</span>
         </div>
-        <div class="lg-item">
-          <div class="lg-box" style="background:${this._rgba(c.highlight.bottom_color, c.highlight.alpha)}"></div>
-          Spadek
+        <div class="ltc-legend-item">
+          <span class="ltc-legend-box" style="background:${cfg.colors.bottom};"></span>
+          <span>Spadek</span>
         </div>
       </div>
     `;
 
-    // LITE MODE
-    if (c.lite_mode) {
-      this.innerHTML = `
-        ${style}
-        <div class="lt-card">
-          <table>${header}<tbody>${rows}</tbody></table>
-          ${legend}
-        </div>
-      `;
+    const tableHTML = `
+      <div class="ltc-card">
+        <table class="ltc-table">
+          ${headerHTML}
+          <tbody>
+            ${rowsHTML}
+          </tbody>
+        </table>
+        ${legendHTML}
+      </div>
+    `;
+
+    if (cfg.lite_mode) {
+      this.innerHTML = `${style}${tableHTML}`;
       return;
     }
 
-    // NORMAL MODE
-    const cardName = c.show_name ? (c.name || entity.attributes.friendly_name) : "";
+    const cardName =
+      cfg.show_name === false
+        ? ""
+        : cfg.name ||
+          stateObj.attributes.friendly_name ||
+          "Tabela ligowa";
+
     this.innerHTML = `
       ${style}
       <ha-card ${cardName ? `header="${cardName}"` : ""}>
-        <div class="lt-card">
-          <table>${header}<tbody>${rows}</tbody></table>
-          ${legend}
-        </div>
+        ${tableHTML}
       </ha-card>
     `;
   }
 
+  _renderRow(row, index, totalTeams) {
+    const cfg = this.config;
+    const pos =
+      row.position != null && row.position !== ""
+        ? parseInt(row.position, 10)
+        : null;
+
+    const classification = this._classifyPosition(pos, totalTeams);
+    const rowStyle = this._rowBackgroundStyle(
+      classification,
+      index
+    );
+
+    const matches = row.matches ?? "-";
+    const points = row.points ?? "-";
+    const goals = row.goals ?? "-";
+
+    let diff = row.diff;
+    let diffStr = "-";
+    if (diff !== undefined && diff !== null && diff !== "") {
+      const n =
+        typeof diff === "number" ? diff : parseInt(diff, 10);
+      if (!isNaN(n)) {
+        diffStr = (n > 0 ? "+" : "") + n;
+      } else {
+        diffStr = String(diff);
+      }
+    }
+
+    const teamName = row.team || "";
+
+    const isFavorite =
+      this._myPosition != null &&
+      pos != null &&
+      pos === this._myPosition;
+
+    const teamClass = isFavorite
+      ? "ltc-team-name ltc-team-fav"
+      : "ltc-team-name";
+
+    return `
+      <tr style="${rowStyle}">
+        <td class="ltc-col-pos">
+          ${pos != null && !isNaN(pos) ? pos : ""}
+        </td>
+        <td class="ltc-col-team">
+          <span class="${teamClass}">${teamName}</span>
+        </td>
+        <td class="ltc-col-m">${matches}</td>
+        <td class="ltc-col-pkt">${points}</td>
+        <td class="ltc-col-goals">${goals}</td>
+        <td class="ltc-col-diff">${diffStr}</td>
+      </tr>
+    `;
+  }
+
+  _classifyPosition(pos, totalTeams) {
+    const h = this.config.highlight;
+    if (!pos || !totalTeams) return null;
+
+    // TOP – Liga Mistrzów
+    if (pos >= 1 && pos <= h.top_count) return "top";
+
+    // Conference – Liga Konferencji
+    if (
+      pos > h.top_count &&
+      pos <= h.top_count + h.conf_count
+    ) {
+      return "conf";
+    }
+
+    // Bottom – Spadek
+    if (
+      h.bottom_count > 0 &&
+      pos > totalTeams - h.bottom_count
+    ) {
+      return "bottom";
+    }
+
+    return null;
+  }
+
+  _rowBackgroundStyle(classification, index) {
+    const cfg = this.config;
+
+    let style = "";
+
+    if (cfg.fill_mode === "gradient" && classification) {
+      const col = cfg.colors[classification];
+      const g = cfg.gradient;
+      style += `
+        background: linear-gradient(to right,
+          rgba(0,0,0,0) 0%,
+          ${this._rgba(col, g.alpha_start)} ${g.start}%,
+          ${this._rgba(col, g.alpha_end)} ${g.end}%,
+          rgba(0,0,0,0) 100%
+        );
+      `;
+      // delikatny lewy pasek w tym samym kolorze
+      style += `border-left: 3px solid ${col};`;
+      return style;
+    }
+
+    if (cfg.fill_mode === "zebra") {
+      if (index % 2 === 1) {
+        style += `background-color:${this._rgba(
+          cfg.zebra_color,
+          cfg.zebra_alpha
+        )};`;
+      }
+      if (classification) {
+        const col = cfg.colors[classification];
+        style += `border-left: 3px solid ${col};`;
+      }
+      return style;
+    }
+
+    // clear – bez tła, ale można zostawić pasek z boku
+    if (classification) {
+      const col = cfg.colors[classification];
+      style += `border-left: 3px solid ${col};`;
+    }
+
+    return style;
+  }
+
   _rgba(hex, alpha) {
+    if (!hex) return `rgba(0,0,0,${alpha})`;
     const h = hex.replace("#", "");
-    const r = parseInt(h.substring(0,2),16);
-    const g = parseInt(h.substring(2,4),16);
-    const b = parseInt(h.substring(4,6),16);
+    if (h.length !== 6) return `rgba(0,0,0,${alpha})`;
+    const r = parseInt(h.substr(0, 2), 16);
+    const g = parseInt(h.substr(2, 2), 16);
+    const b = parseInt(h.substr(4, 2), 16);
     return `rgba(${r},${g},${b},${alpha})`;
   }
 
@@ -206,7 +362,36 @@ class LeagueTableCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    return { entity: "sensor.90minut_gornik_zabrze_table" };
+    // Od razu po dodaniu karty YAML będzie pełny
+    return {
+      entity: "sensor.90minut_gornik_zabrze_table",
+      name: "Tabela ligowa",
+      show_name: true,
+      lite_mode: false,
+      fill_mode: "gradient",
+      gradient: {
+        start: 35,
+        end: 100,
+        alpha_start: 0.0,
+        alpha_end: 0.55,
+      },
+      zebra_color: "#f0f0f0",
+      zebra_alpha: 0.4,
+      highlight: {
+        top_count: 2,
+        conf_count: 2,
+        bottom_count: 3,
+      },
+      colors: {
+        top: "#3ba55d",
+        conf: "#468cd2",
+        bottom: "#e23b3b",
+      },
+    };
+  }
+
+  getCardSize() {
+    return 5;
   }
 }
 
@@ -218,5 +403,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "league-table-card",
   name: "League Table Card (90minut)",
-  description: "Karta tabeli ligowej kompatybilna z Matches Card"
+  description: "Tabela ligowa na podstawie sensora 90minut.pl",
 });
