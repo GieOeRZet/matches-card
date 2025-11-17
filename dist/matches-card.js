@@ -1,88 +1,58 @@
 // ============================================================================
-//  Matches Card (90minut) – Stable Rebuild (layout 0.3.000 preserved)
-//  WITH:
-//   - fixed date/time column
-//   - fixed score alignment
-//   - separate W/D/L column
-//   - spacing fixes
-//   - LITE mode
-//   - FULL default YAML + bidirectional sync (deep merge)
+//  Matches Card (90minut) – v0.3.022-ish (layout jak 0.3.000 + poprawki)
+//  - 1 kolumna: DATA (góra) + GODZINA/KONIEC (dół)
+//  - W/P/R w osobnej kolumnie (kółka), nic pod wynikiem
+//  - Herby jak były, tylko lekki odstęp między nimi
+//  - Większy odstęp między logo ligi a herbami
+//  - Lite mode: bez <ha-card>
+//  - full_team_names: pełne / skrócone nazwy
 // ============================================================================
 
 class MatchesCard extends HTMLElement {
 
-  // --------------------------------------------------------------------------
-  // DEFAULT CONFIG returned also into YAML on card creation
-  // --------------------------------------------------------------------------
-  static getStubConfig() {
-    return {
-      entity: "",
+  setConfig(config) {
+    if (!config.entity) {
+      throw new Error("Entity is required (np. sensor.90minut_gornik_zabrze_matches)");
+    }
+
+    // Domyślne wartości spójne z edytorem
+    const defaults = {
       name: "90minut Matches",
       show_name: true,
       show_logos: true,
       full_team_names: true,
       show_result_symbols: true,
-      lite_mode: false,
-
       fill_mode: "gradient",
-
-      font_size: {
-        date: 0.9,
-        status: 0.8,
-        teams: 1.0,
-        score: 1.0
-      },
-
-      icon_size: {
-        league: 26,
-        crest: 24,
-        result: 26
-      },
-
+      font_size: { date: 0.9, status: 0.8, teams: 1.0, score: 1.0 },
+      icon_size: { league: 26, crest: 24, result: 26 },
       colors: {
         win: "#3ba55d",
         draw: "#468cd2",
         loss: "#e23b3b"
       },
-
       gradient: {
         start: 35,
         end: 100,
         alpha_start: 0.0,
-        alpha_end: 0.55
+        alpha_end: 0.55,
       },
-
       zebra_color: "#f0f0f0",
-      zebra_alpha: 0.4
+      zebra_alpha: 0.4,
+      lite_mode: false,
     };
+
+    const merged = {
+      ...defaults,
+      ...config,
+      font_size: { ...defaults.font_size, ...(config.font_size || {}) },
+      icon_size: { ...defaults.icon_size, ...(config.icon_size || {}) },
+      colors: { ...defaults.colors, ...(config.colors || {}) },
+      gradient: { ...defaults.gradient, ...(config.gradient || {}) },
+    };
+
+    this.config = merged;
   }
 
-  // --------------------------------------------------------------------------
-  // DEEP MERGE – **critical fix** so config from editor/YAML syncs both ways
-  // --------------------------------------------------------------------------
-  static _deepMerge(target, defaults) {
-    for (const k in defaults) {
-      if (defaults[k] !== null && typeof defaults[k] === "object" && !Array.isArray(defaults[k])) {
-        if (!target[k]) target[k] = {};
-        this._deepMerge(target[k], defaults[k]);
-      } else {
-        if (target[k] === undefined) target[k] = defaults[k];
-      }
-    }
-    return target;
-  }
-
-  // --------------------------------------------------------------------------
-  // CONFIG SETTER
-  // --------------------------------------------------------------------------
-  setConfig(config) {
-    const defaults = MatchesCard.getStubConfig();
-    this.config = MatchesCard._deepMerge(JSON.parse(JSON.stringify(config)), defaults);
-  }
-
-  // --------------------------------------------------------------------------
-  // MAIN RENDER LOOP
-  // --------------------------------------------------------------------------
   set hass(hass) {
     this._hass = hass;
 
@@ -101,6 +71,10 @@ class MatchesCard extends HTMLElement {
 
     const style = `
       <style>
+        :host {
+          display:block;
+        }
+
         ha-card {
           padding:10px 0;
           font-family: Arial, sans-serif;
@@ -132,7 +106,8 @@ class MatchesCard extends HTMLElement {
         }
 
         .league-cell {
-          padding-right:12px; /* odstęp od herbów */
+          padding-right:12px; /* większy odstęp od herbów */
+          text-align:center;
         }
 
         .team-cell {
@@ -150,10 +125,19 @@ class MatchesCard extends HTMLElement {
           justify-content:center;
           align-items:center;
           line-height:1.3em;
+          text-align:center;
         }
 
         .result-cell {
           text-align:center;
+        }
+
+        .bold {
+          font-weight:600;
+        }
+
+        .dim {
+          opacity:0.7;
         }
 
         .result-circle {
@@ -172,141 +156,224 @@ class MatchesCard extends HTMLElement {
       </style>
     `;
 
-    const rows = matches.map(m => this._row(m)).join("");
+    const rows = matches.map((m) => this._row(m)).join("");
 
+    // LITE MODE – bez ha-card
     if (this.config.lite_mode) {
-      this.innerHTML = `${style}<table>${rows}</table>`;
+      this.innerHTML = `
+        ${style}
+        <table>${rows}</table>
+      `;
       return;
     }
 
-    const header = this.config.show_name ? `header="${this.config.name}"` : "";
+    const header =
+      this.config.show_name === false
+        ? ""
+        : (this.config.name || entity.attributes.friendly_name || "90minut Matches");
 
     this.innerHTML = `
       ${style}
-      <ha-card ${header}>
+      <ha-card ${header ? `header="${header}"` : ""}>
         <table>${rows}</table>
       </ha-card>
     `;
   }
 
-  // --------------------------------------------------------------------------
-  // RENDER ONE MATCH ROW
-  // --------------------------------------------------------------------------
   _row(m) {
+    // DATA + GODZINA/KONIEC
+    let dateStr = "-";
+    let timeStr = "";
 
-    // -----------------------------
-    // DATE + TIME / KONIEC (FIX)
-    // -----------------------------
-    const dt = m.date || ""; // "2025-10-05 20:15"
-    const [day, tm] = dt.split(" "); // ["2025-10-05", "20:15"]
+    if (m.date) {
+      const safe = String(m.date).replace(" ", "T");
+      const d = new Date(safe);
 
-    const statusText =
-      m.finished === true
-        ? "KONIEC"
-        : (tm || "");
+      if (!isNaN(d.getTime())) {
+        dateStr = d.toLocaleDateString("pl-PL", {
+          day: "2-digit",
+          month: "2-digit",
+          year: "numeric",
+        });
 
-    const [homeScore, awayScore] = (m.score || "-").split("-");
+        if (m.finished) {
+          timeStr = "KONIEC";
+        } else {
+          timeStr = d.toLocaleTimeString("pl-PL", {
+            hour: "2-digit",
+            minute: "2-digit",
+          });
+        }
+      } else {
+        // fallback, jakby Date nie zadziałał
+        const [rawDate, rawTime] = String(m.date).split(" ");
+        dateStr = rawDate || "-";
+        timeStr = m.finished ? "KONIEC" : (rawTime || "");
+      }
+    }
 
-    const homeBold = m.result === "win" ? "bold" : m.result === "loss" ? "dim" : "";
-    const awayBold = m.result === "loss" ? "bold" : m.result === "win" ? "dim" : "";
+    const scoreStr = m.score || "-";
+    const [homeScore, awayScore] = scoreStr.includes("-")
+      ? scoreStr.split("-")
+      : [scoreStr, ""];
+
+    const full = this.config.full_team_names !== false;
+    const homeName = full ? (m.home || "") : (m.home || "").split(" ")[0];
+    const awayName = full ? (m.away || "") : (m.away || "").split(" ")[0];
+
+    const res = m.result; // "win" / "draw" / "loss" / null
+
+    const homeBold = res === "win" ? "bold" : res === "loss" ? "dim" : "";
+    const awayBold = res === "loss" ? "bold" : res === "win" ? "dim" : "";
+
+    const rowStyle = this._gradientStyle(res);
 
     return `
-      <tr style="${this._gradient(m)}">
-
-        <!-- DATA -->
+      <tr style="${rowStyle}">
+        <!-- DATA + GODZINA/KONIEC -->
         <td style="width:10%; text-align:center;">
-          <div style="font-size:${this.config.font_size.date}rem">${day}</div>
-          <div style="font-size:${this.config.font_size.status}rem">${statusText}</div>
+          <div style="font-size:${this.config.font_size.date}rem;">${dateStr}</div>
+          <div style="font-size:${this.config.font_size.status}rem;">${timeStr}</div>
         </td>
 
         <!-- LIGA -->
-        <td class="league-cell" style="width:10%; text-align:center;">
+        <td class="league-cell" style="width:10%;">
           ${this._league(m.league)}
         </td>
 
         <!-- HERBY -->
-        ${this.config.show_logos ? `
+        ${
+          this.config.show_logos
+            ? `
           <td class="crest-cell dual-cell" style="width:10%;">
             <img src="${m.logo_home}" height="${this.config.icon_size.crest}" />
             <img src="${m.logo_away}" height="${this.config.icon_size.crest}" />
           </td>
-        ` : ""}
+        `
+            : ""
+        }
 
         <!-- DRUŻYNY -->
         <td class="team-cell">
-          <div class="team-row ${homeBold}" style="font-size:${this.config.font_size.teams}rem">${m.home}</div>
-          <div class="team-row ${awayBold}" style="font-size:${this.config.font_size.teams}rem">${m.away}</div>
+          <div class="team-row ${homeBold}" style="font-size:${this.config.font_size.teams}rem;">${homeName}</div>
+          <div class="team-row ${awayBold}" style="font-size:${this.config.font_size.teams}rem;">${awayName}</div>
         </td>
 
-        <!-- WYNIK -->
+        <!-- WYNIK (osobna pionowa sekcja, wyrównana do drużyn) -->
         <td class="score-cell" style="width:10%;">
-          <div class="${homeBold}" style="font-size:${this.config.font_size.score}rem">${homeScore}</div>
-          <div class="${awayBold}" style="font-size:${this.config.font_size.score}rem">${awayScore}</div>
+          <div class="${homeBold}" style="font-size:${this.config.font_size.score}rem;">${homeScore}</div>
+          <div class="${awayBold}" style="font-size:${this.config.font_size.score}rem;">${awayScore}</div>
         </td>
 
-        <!-- W/D/L -->
+        <!-- W / D / L – osobna kolumna z kółkiem -->
         <td class="result-cell" style="width:8%;">
-          ${this.config.show_result_symbols && m.result ? `
-            <div class="result-circle" style="background:${this.config.colors[m.result]}">
-              ${m.result.charAt(0).toUpperCase()}
+          ${
+            this.config.show_result_symbols && res
+              ? `
+            <div class="result-circle" style="background:${this.config.colors[res] || "#000"};">
+              ${res === "win" ? "W" : res === "draw" ? "D" : "P"}
             </div>
-          ` : ""}
+          `
+              : ""
+          }
         </td>
-
       </tr>
     `;
   }
 
-  // --------------------------------------------------------------------------
-  // LEAGUE ICON
-  // --------------------------------------------------------------------------
-  _league(code) {
-    const file =
-      code === "L"  ? "ekstraklasa.png" :
-      code === "PP" ? "puchar.png" :
-      null;
+  _gradientStyle(result) {
+    if (this.config.fill_mode !== "gradient" || !result) return "";
 
-    if (!file) return `<div>${code}</div>`;
+    const col = this.config.colors[result];
+    if (!col) return "";
 
-    return `<img src="https://raw.githubusercontent.com/GieOeRZet/matches-card/main/logo/${file}"
-                height="${this.config.icon_size.league}" />`;
-  }
-
-  // --------------------------------------------------------------------------
-  // GRADIENT GENERATOR
-  // --------------------------------------------------------------------------
-  _gradient(m) {
-    if (this.config.fill_mode !== "gradient" || !m.result) return "";
-
-    const c = this.config.colors[m.result];
-    const g = this.config.gradient;
+    const g = this.config.gradient || {};
+    const start = typeof g.start === "number" ? g.start : 35;
+    const end = typeof g.end === "number" ? g.end : 100;
+    const aStart = typeof g.alpha_start === "number" ? g.alpha_start : 0.0;
+    const aEnd = typeof g.alpha_end === "number" ? g.alpha_end : 0.55;
 
     return `
       background: linear-gradient(to right,
         rgba(0,0,0,0) 0%,
-        ${this._rgba(c, g.alpha_start)} ${g.start}%,
-        ${this._rgba(c, g.alpha_end)} ${g.end}%,
+        ${this._rgba(col, aStart)} ${start}%,
+        ${this._rgba(col, aEnd)} ${end}%,
         rgba(0,0,0,0) 100%
       );
     `;
   }
 
-  // --------------------------------------------------------------------------
-  // HEX → RGBA
-  // --------------------------------------------------------------------------
+  _league(code) {
+    if (!code) return "";
+
+    const file =
+      code === "L" ? "ekstraklasa.png" :
+      code === "PP" ? "puchar.png" :
+      null;
+
+    if (!file) {
+      return `<div style="font-size:0.9em;opacity:0.8;">${code}</div>`;
+    }
+
+    return `
+      <img
+        src="https://raw.githubusercontent.com/GieOeRZet/matches-card/main/logo/${file}"
+        height="${this.config.icon_size.league}"
+      />
+    `;
+  }
+
   _rgba(hex, alpha) {
+    if (!hex) return `rgba(0,0,0,${alpha})`;
     const h = hex.replace("#", "");
-    const r = parseInt(h.substr(0,2),16);
-    const g = parseInt(h.substr(2,2),16);
-    const b = parseInt(h.substr(4,2),16);
+    if (h.length !== 6) return `rgba(0,0,0,${alpha})`;
+    const r = parseInt(h.substring(0, 2), 16);
+    const g = parseInt(h.substring(2, 4), 16);
+    const b = parseInt(h.substring(4, 6), 16);
     return `rgba(${r},${g},${b},${alpha})`;
   }
 
-  // --------------------------------------------------------------------------
-  // LINK TO EDITOR
-  // --------------------------------------------------------------------------
   static getConfigElement() {
     return document.createElement("matches-card-editor");
+  }
+
+  static getStubConfig() {
+    // Pełny YAML na starcie
+    return {
+      type: "custom:matches-card",
+      entity: "",
+      name: "90minut Matches",
+      show_name: true,
+      show_logos: true,
+      full_team_names: true,
+      show_result_symbols: true,
+      fill_mode: "gradient",
+      font_size: {
+        date: 0.9,
+        status: 0.8,
+        teams: 1.0,
+        score: 1.0,
+      },
+      icon_size: {
+        league: 26,
+        crest: 24,
+        result: 26,
+      },
+      colors: {
+        win: "#3ba55d",
+        draw: "#468cd2",
+        loss: "#e23b3b",
+      },
+      gradient: {
+        start: 35,
+        end: 100,
+        alpha_start: 0.0,
+        alpha_end: 0.55,
+      },
+      zebra_color: "#f0f0f0",
+      zebra_alpha: 0.4,
+      lite_mode: false,
+    };
   }
 
   getCardSize() {
@@ -314,11 +381,13 @@ class MatchesCard extends HTMLElement {
   }
 }
 
-customElements.define("matches-card", MatchesCard);
+if (!customElements.get("matches-card")) {
+  customElements.define("matches-card", MatchesCard);
+}
 
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "matches-card",
   name: "Matches Card (90minut)",
-  description: "Karta pokazująca mecze z sensora 90minut.pl"
+  description: "Karta pokazująca mecze z sensora 90minut.pl",
 });
