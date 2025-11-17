@@ -1,0 +1,45 @@
+name: Cleanup old releases and tags
+
+on:
+  workflow_dispatch:
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to delete tags and releases
+
+    steps:
+      - name: 🧩 Checkout repo
+        uses: actions/checkout@v4
+
+      - name: 🔍 Fetch all tags
+        run: git fetch --tags
+
+      - name: 🗑️ Delete releases and tags in range 0.3.004–0.3.198
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "Searching for releases and tags to remove..."
+
+          # patterns: version starts with 0.3.
+          for tag in $(git tag | grep -E '^0\.3\.[0-9]+' ); do
+            version=${tag#0.3.}
+
+            # skip invalid or non-numeric
+            if ! [[ "$version" =~ ^[0-9]+$ ]]; then
+              continue
+            fi
+
+            # only delete versions >003 and <199
+            if [ "$version" -gt 3 ] && [ "$version" -lt 199 ]; then
+              echo "🗑️ Removing tag: $tag"
+
+              # delete tag locally + remote
+              git tag -d "$tag" || true
+              git push origin :refs/tags/"$tag" || true
+
+              echo "🗑️ Removing release: $tag"
+              gh release delete "$tag" -y || true
+            fi
+          done
