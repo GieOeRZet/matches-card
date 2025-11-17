@@ -1,12 +1,13 @@
-// Matches Cards Pack – version 0.3.108
+// Matches Cards Pack – version 0.3.109
 // Auto-generated from dist/
 
 // ===== FILE INCLUDED: dist/league-table-card-editor.js =====
 // ============================================================================
-//  League Table Card – FULL EDITOR v0.1.100
+//  League Table Card Editor – FIXED (value binding + alpha colors + debounce)
 // ============================================================================
 
 class LeagueTableCardEditor extends HTMLElement {
+
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -15,48 +16,27 @@ class LeagueTableCardEditor extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = JSON.parse(JSON.stringify(config || {}));
+    this._config = JSON.parse(JSON.stringify(config));
     this.render();
   }
 
-  // -----------------------------------------------------
-  // UPDATE + DEBOUNCE
-  // -----------------------------------------------------
-  _update(path, value) {
-    const cfg = JSON.parse(JSON.stringify(this._config));
-
-    // Ustawiamy w configu głębokie pola
-    const parts = path.split(".");
-    let obj = cfg;
-    while (parts.length > 1) {
-      const p = parts.shift();
-      if (!obj[p]) obj[p] = {};
-      obj = obj[p];
-    }
-    obj[parts[0]] = value;
-
-    this._config = cfg;
+  _debounceUpdate(key, value) {
+    this._config[key] = value;
 
     clearTimeout(this._debounce);
-    this._debounce = setTimeout(() => this._apply(), 700);
+    this._debounce = setTimeout(() => {
+      this.dispatchEvent(
+        new CustomEvent("config-changed", {
+          detail: { config: this._config }
+        })
+      );
+    }, 700);
   }
 
-  _apply() {
-    const ev = new CustomEvent("config-changed", {
-      detail: { config: this._config },
-      bubbles: true,
-      composed: true,
-    });
-    this.dispatchEvent(ev);
-  }
-
-  // -----------------------------------------------------
-  // RENDER
-  // -----------------------------------------------------
   render() {
     if (!this.shadowRoot) return;
+
     const c = this._config;
-    const hl = c.highlight || {};
 
     this.shadowRoot.innerHTML = `
       <style>
@@ -66,244 +46,172 @@ class LeagueTableCardEditor extends HTMLElement {
           border: 1px solid rgba(255,255,255,0.15);
           overflow: hidden;
         }
-
-        summary {
+        .group summary {
           padding: 10px 12px;
-          cursor: pointer;
           font-size: 1rem;
+          cursor: pointer;
           background: rgba(255,255,255,0.05);
         }
-
-        .content {
+        .group > div {
           padding: 10px 16px 18px 16px;
           display: grid;
           grid-template-columns: 1fr 1fr;
           gap: 12px;
         }
-
-        label {
-          display: flex;
-          flex-direction: column;
-          font-size: 0.85rem;
-          opacity: 0.85;
-        }
-
-        input[type="number"],
-        select,
-        input[type="text"] {
+        label { font-size: 0.85rem; display:flex; flex-direction:column; }
+        input[type="number"], input[type="text"] {
           padding: 4px 6px;
           border-radius: 6px;
           border: 1px solid rgba(255,255,255,0.20);
           background: rgba(0,0,0,0.2);
           color: inherit;
         }
-
         input[type="color"] {
-          padding: 0;
-          width: 40px;
-          height: 28px;
-          border: none;
-          background: transparent;
-          cursor: pointer;
-        }
-
-        .switch {
-          display: flex;
-          align-items: center;
-          gap: 10px;
+          width:40px;
+          height:28px;
+          padding:0;
+          border:none;
+          background:transparent;
         }
       </style>
 
       <!-- PODSTAWOWE -->
       <details class="group" open>
         <summary>Podstawowe</summary>
-        <div class="content">
+        <div>
           <label>
             Nazwa karty
-            <input type="text"
-              value="${c.name ?? ""}"
-              @input="${e => this._update("name", e.target.value)}">
+            <input id="name" type="text" value="${c.name ?? ''}">
           </label>
 
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.show_name !== false}"
-              @change="${e => this._update("show_name", e.target.checked)}">
-            </ha-switch>
-            Pokaż nagłówek
-          </label>
-
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.show_trend !== false}"
-              @change="${e => this._update("show_trend", e.target.checked)}">
-            </ha-switch>
-            Pokaż kolumnę trendu
-          </label>
-
-          <label class="switch">
-            <ha-switch
-              ?checked="${c.lite_mode === true}"
-              @change="${e => this._update("lite_mode", e.target.checked)}">
-            </ha-switch>
+          <label>
             Tryb LITE
+            <ha-switch id="lite_mode" ?checked="${c.lite_mode === true}"></ha-switch>
+          </label>
+
+          <label>
+            Pokaz trend
+            <ha-switch id="show_trend" ?checked="${c.show_trend !== false}"></ha-switch>
           </label>
         </div>
       </details>
 
-      <!-- ROZMIARY CZCIONEK -->
-      <details class="group">
-        <summary>Rozmiary czcionek</summary>
-        <div class="content">
+      <!-- PODŚWIETLENIA -->
+      <details class="group" open>
+        <summary>Podświetlenia</summary>
+        <div>
           <label>
-            Nagłówek
-            <input type="number" step="0.1"
-              value="${c.font_size?.header ?? 0.8}"
-              @input="${e => this._update("font_size.header", Number(e.target.value))}">
+            TOP – kolor
+            <input id="top_color" type="color" value="${c.highlight?.top_color ?? '#00ff00'}">
           </label>
 
           <label>
-            Wiersz
-            <input type="number" step="0.1"
-              value="${c.font_size?.row ?? 0.9}"
-              @input="${e => this._update("font_size.row", Number(e.target.value))}">
+            TOP – alfa
+            <input id="top_alpha" type="number" min="0" max="1" step="0.05"
+                   value="${c.highlight?.top_alpha ?? 0.35}">
           </label>
 
           <label>
-            Drużyna
-            <input type="number" step="0.1"
-              value="${c.font_size?.team ?? 1.0}"
-              @input="${e => this._update("font_size.team", Number(e.target.value))}">
-          </label>
-        </div>
-      </details>
-
-      <!-- POZYCJE KLUCZOWE -->
-      <details class="group">
-        <summary>Konfiguracja pozycji</summary>
-        <div class="content">
-
-          <label>
-            Top (LM) – ile miejsc
-            <input type="number" min="0"
-              value="${hl.top_count ?? 2}"
-              @input="${e => this._update("highlight.top_count", Number(e.target.value))}">
+            MIEJSCA 3–4 – kolor
+            <input id="mid_color" type="color" value="${c.highlight?.mid_color ?? '#468cd2'}">
           </label>
 
           <label>
-            Europa (LK/LE) – ile miejsc
-            <input type="number" min="0"
-              value="${hl.eu_count ?? 2}"
-              @input="${e => this._update("highlight.eu_count", Number(e.target.value))}">
+            MIEJSCA 3–4 – alfa
+            <input id="mid_alpha" type="number" min="0" max="1" step="0.05"
+                   value="${c.highlight?.mid_alpha ?? 0.35}">
           </label>
 
           <label>
-            Spadek – ile miejsc
-            <input type="number" min="0"
-              value="${hl.bottom_count ?? 3}"
-              @input="${e => this._update("highlight.bottom_count", Number(e.target.value))}">
+            SPADKOWE – kolor
+            <input id="bottom_color" type="color" value="${c.highlight?.bottom_color ?? '#e23b3b'}">
           </label>
 
-        </div>
-      </details>
+          <label>
+            SPADKOWE – alfa
+            <input id="bottom_alpha" type="number" min="0" max="1" step="0.05"
+                   value="${c.highlight?.bottom_alpha ?? 0.35}">
+          </label>
 
-      <!-- KOLORY PODŚWIETLEŃ -->
-      <details class="group">
-        <summary>Kolory podświetleń (z ALFĄ)</summary>
-        <div class="content">
-
-          <!-- MOJA DRUŻYNA -->
           <label>
             Moja drużyna – kolor
-            <input type="color"
-              value="${hl.favorite_color ?? "#ffffff"}"
-              @input="${e => this._update("highlight.favorite_color", e.target.value)}">
+            <input id="favorite_color" type="color"
+                   value="${c.highlight?.favorite_color ?? '#ffffff'}">
           </label>
 
           <label>
-            Alfa
-            <input type="number" min="0" max="1" step="0.05"
-              value="${hl.favorite_alpha ?? 0.55}"
-              @input="${e => this._update("highlight.favorite_alpha", Number(e.target.value))}">
+            Moja drużyna – alfa
+            <input id="favorite_alpha" type="number" min="0" max="1" step="0.05"
+                   value="${c.highlight?.favorite_alpha ?? 0.35}">
           </label>
-
-          <!-- TOP miejsca -->
-          <label>
-            Top – kolor
-            <input type="color"
-              value="${hl.top_color ?? "#3ba55d"}"
-              @input="${e => this._update("highlight.top_color", e.target.value)}">
-          </label>
-
-          <label>
-            Alfa
-            <input type="number" min="0" max="1" step="0.05"
-              value="${hl.top_alpha ?? 0.55}"
-              @input="${e => this._update("highlight.top_alpha", Number(e.target.value))}">
-          </label>
-
-          <!-- EUROPEJSKIE -->
-          <label>
-            Europa – kolor
-            <input type="color"
-              value="${hl.eu_color ?? "#468cd2"}"
-              @input="${e => this._update("highlight.eu_color", e.target.value)}">
-          </label>
-
-          <label>
-            Alfa
-            <input type="number" min="0" max="1" step="0.05"
-              value="${hl.eu_alpha ?? 0.55}"
-              @input="${e => this._update("highlight.eu_alpha", Number(e.target.value))}">
-          </label>
-
-          <!-- SPADKOWE -->
-          <label>
-            Spadek – kolor
-            <input type="color"
-              value="${hl.bottom_color ?? "#e23b3b"}"
-              @input="${e => this._update("highlight.bottom_color", e.target.value)}">
-          </label>
-
-          <label>
-            Alfa
-            <input type="number" min="0" max="1" step="0.05"
-              value="${hl.bottom_alpha ?? 0.55}"
-              @input="${e => this._update("highlight.bottom_alpha", Number(e.target.value))}">
-          </label>
-
         </div>
       </details>
     `;
+
+    // =====================================
+    //  BIND INPUTS → CONFIG
+    // =====================================
+    const bind = (id, key, group = null) => {
+      const el = this.shadowRoot.getElementById(id);
+      if (!el) return;
+
+      const handler = (e) => {
+        const value =
+          el.type === "number" ? Number(e.target.value)
+          : el.type === "color" ? e.target.value
+          : el.checked ?? e.target.value;
+
+        if (group) {
+          this._config[group][key] = value;
+          this._debounceUpdate(group, { ...this._config[group] });
+        } else {
+          this._debounceUpdate(key, value);
+        }
+      };
+
+      el.addEventListener("input", handler);
+      el.addEventListener("change", handler);
+    };
+
+    // BASIC
+    bind("name", "name");
+    bind("lite_mode", "lite_mode");
+    bind("show_trend", "show_trend");
+
+    // HIGHLIGHT (z alfach)
+    bind("top_color", "top_color", "highlight");
+    bind("top_alpha", "top_alpha", "highlight");
+
+    bind("mid_color", "mid_color", "highlight");
+    bind("mid_alpha", "mid_alpha", "highlight");
+
+    bind("bottom_color", "bottom_color", "highlight");
+    bind("bottom_alpha", "bottom_alpha", "highlight");
+
+    bind("favorite_color", "favorite_color", "highlight");
+    bind("favorite_alpha", "favorite_alpha", "highlight");
   }
+
+  static getConfigElement() { return this; }
+  static getStubConfig() { return {}; }
 }
 
 customElements.define("league-table-card-editor", LeagueTableCardEditor);
 // ===== FILE INCLUDED: dist/league-table-card.js =====
 // ============================================================================
-//  League Table Card (90minut) – v0.1.100
-//  Author: GieOeRZet
-//  Dane z sensora: attributes.table[], my_position, my_points, my_goal_diff
-//  - Spójny layout z Matches Card
-//  - Podświetlenie: TOP / Liga Konferencji / dół / moja drużyna
-//  - Ostatnia kolumna: TREND (opcjonalne pole "trend" w każdym wierszu)
-//  - Tryb LITE: bez <ha-card>, samo <table>
-//  - Kolory + ALFA konfigurowalne, domyślna alfa = 0.55 (jak w karcie meczów)
+//  League Table Card (90minut) – v0.1.000 (no trend)
 // ============================================================================
 
 class LeagueTableCard extends HTMLElement {
-  setConfig(config) {
-    if (!config.entity) {
-      throw new Error(
-        "Entity is required (np. sensor.90minut_gornik_zabrze_table)"
-      );
-    }
 
-    const defaults = {
+  setConfig(config) {
+    if (!config.entity)
+      throw new Error("Entity is required (np. sensor.90minut_table)");
+
+    this.config = {
       name: "Tabela ligowa",
       show_name: true,
       lite_mode: false,
-      show_trend: true,
 
       font_size: {
         header: 0.8,
@@ -313,381 +221,156 @@ class LeagueTableCard extends HTMLElement {
 
       highlight: {
         favorite: true,
-
-        // ILE MIEJSC:
-        top_count: 2,    // Top2 = "Liga Mistrzów"
-        eu_count: 2,     // 3–4 = "Liga Konferencji"
-        bottom_count: 3, // 3 ostatnie = "Spadek"
-
-        // KOLORY (bez powiązania z kartą meczową, ale stylistycznie podobne)
-        favorite_color: "#ffffff", // biały, będzie z alfą
-        top_color: "#3ba55d",      // zielony (jak win)
-        eu_color: "#468cd2",       // niebieski (jak draw)
-        bottom_color: "#e23b3b",   // czerwony (jak loss)
-
-        // ALFY – ustawione tak jak końcowa alfa w gradientach meczowych
-        favorite_alpha: 0.55,
-        top_alpha: 0.55,
-        eu_alpha: 0.55,
-        bottom_alpha: 0.55,
+        top_count: 2,
+        conference_count: 2,
+        bottom_count: 3,
+        favorite_color: "rgba(255,255,255,0.35)",
+        top_color: "rgba(59,165,93,0.35)",
+        conf_color: "rgba(70,140,210,0.35)",
+        bottom_color: "rgba(226,59,59,0.35)"
       },
+
+      ...config
     };
 
-    this.config = {
-      ...defaults,
-      ...config,
-      font_size: { ...defaults.font_size, ...(config.font_size || {}) },
-      highlight: { ...defaults.highlight, ...(config.highlight || {}) },
-    };
-
-    this.entityId = config.entity;
+    this.entityId = this.config.entity;
   }
 
   set hass(hass) {
     this._hass = hass;
-    this._render();
-  }
+    const stateObj = hass.states[this.entityId];
 
-  // -------------------------------------------------
-  // RENDER
-  // -------------------------------------------------
-  _render() {
-    if (!this._hass || !this.entityId) return;
-
-    const stateObj = this._hass.states[this.entityId];
     if (!stateObj) {
-      this.innerHTML = "<ha-card>Błąd: encja nie istnieje.</ha-card>";
+      this.innerHTML = "<ha-card>Encja nie istnieje.</ha-card>";
       return;
     }
 
     const table = stateObj.attributes.table || [];
-    const totalTeams = table.length || 0;
-    const myPosAttr = stateObj.attributes.my_position;
-    const myPosition = myPosAttr != null ? parseInt(myPosAttr, 10) : null;
+    const total = table.length;
+    const myPos = parseInt(stateObj.attributes.my_position, 10);
 
     const cfg = this.config;
-    const hl = cfg.highlight;
-
-    // Wyliczamy REALNE kolory z alfą
-    const favBg = this._withAlpha(hl.favorite_color, hl.favorite_alpha);
-    const topBg = this._withAlpha(hl.top_color, hl.top_alpha);
-    const euBg = this._withAlpha(hl.eu_color, hl.eu_alpha);
-    const bottomBg = this._withAlpha(hl.bottom_color, hl.bottom_alpha);
 
     const style = `
       <style>
-        .ltc-card {
-          font-family: "Sofascore Sans", Arial, sans-serif;
-        }
-        table.ltc-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        .ltc-table th,
-        .ltc-table td {
-          padding: 4px 6px;
-          border-bottom: 1px solid rgba(0,0,0,0.08);
-          font-size: ${cfg.font_size.row}rem;
-          text-align: center;
-          vertical-align: middle;
-          white-space: nowrap;
-        }
-        .ltc-table th {
-          font-weight: 600;
-          font-size: ${cfg.font_size.header}rem;
-          opacity: 0.8;
-        }
-        .ltc-col-pos   { width: 10%; text-align: right; }
-        .ltc-col-team  {
-          text-align: left;
-          font-size: ${cfg.font_size.team}rem;
-        }
-        .ltc-col-m     { width: 8%;  }
-        .ltc-col-pkt   { width: 10%; font-weight: 600; }
-        .ltc-col-goals { width: 14%; }
-        .ltc-col-diff  { width: 10%; }
-        .ltc-col-trend { width: 10%; }
-
-        .ltc-row-favorite {
-          background-color: ${favBg};
-        }
-        .ltc-row-top {
-          background-color: ${topBg};
-        }
-        .ltc-row-eu {
-          background-color: ${euBg};
-        }
-        .ltc-row-bottom {
-          background-color: ${bottomBg};
+        table {
+          width:100%;
+          border-collapse:collapse;
+          font-family: Arial, sans-serif;
         }
 
-        .ltc-team-name {
-          overflow: hidden;
-          text-overflow: ellipsis;
+        th, td {
+          padding:4px 6px;
+          border-bottom:1px solid rgba(0,0,0,0.1);
+          text-align:center;
+          white-space:nowrap;
         }
 
-        .ltc-trend-up {
-          color: var(--success-color, #2e7d32);
-        }
-        .ltc-trend-down {
-          color: var(--error-color, #c62828);
-        }
-        .ltc-trend-same {
-          color: var(--secondary-text-color, #808080);
+        th {
+          font-size:${cfg.font_size.header}rem;
+          opacity:0.75;
         }
 
-        .ltc-legend {
-          margin-top: 6px;
-          font-size: 0.75rem;
-          opacity: 0.85;
-          display: flex;
-          flex-wrap: wrap;
-          gap: 8px 16px;
-          align-items: center;
+        .team-col {
+          text-align:left;
+          font-size:${cfg.font_size.team}rem;
         }
-        .ltc-legend-item {
-          display: inline-flex;
-          align-items: center;
-          gap: 4px;
+
+        .fav { background:${cfg.highlight.favorite_color}; }
+        .top { background:${cfg.highlight.top_color}; }
+        .conf { background:${cfg.highlight.conf_color}; }
+        .bot { background:${cfg.highlight.bottom_color}; }
+
+        .legend {
+          margin-top:10px;
+          display:flex;
+          gap:14px;
+          align-items:center;
+          font-size:0.85rem;
+          opacity:0.8;
         }
-        .ltc-legend-box {
-          width: 10px;
-          height: 10px;
-          border-radius: 2px;
+        .legend-box {
+          width:14px;
+          height:14px;
+          border-radius:4px;
+          display:inline-block;
         }
       </style>
     `;
 
-    const rowsHTML = table
-      .map((row) => this._renderRow(row, myPosition, totalTeams))
-      .join("");
+    const rows = table.map(row => {
+      const pos = parseInt(row.position, 10);
 
-    const headerHTML = `
-      <thead>
-        <tr>
-          <th class="ltc-col-pos">Poz</th>
-          <th class="ltc-col-team">Drużyna</th>
-          <th class="ltc-col-m">M</th>
-          <th class="ltc-col-pkt">Pkt</th>
-          <th class="ltc-col-goals">Bramki</th>
-          <th class="ltc-col-diff">+/-</th>
-          ${
-            this.config.show_trend
-              ? `<th class="ltc-col-trend">Trend</th>`
-              : ""
-          }
+      let cls = "";
+      if (cfg.highlight.favorite && pos === myPos) cls = "fav";
+      else if (pos <= cfg.highlight.top_count) cls = "top";
+      else if (pos > cfg.highlight.top_count && pos <= cfg.highlight.top_count + cfg.highlight.conference_count) cls = "conf";
+      else if (pos > total - cfg.highlight.bottom_count) cls = "bot";
+
+      return `
+        <tr class="${cls}">
+          <td>${pos}</td>
+          <td class="team-col">${row.team}</td>
+          <td>${row.matches}</td>
+          <td>${row.points}</td>
+          <td>${row.goals}</td>
+          <td>${row.diff >= 0 ? "+" + row.diff : row.diff}</td>
         </tr>
-      </thead>
-    `;
+      `;
+    }).join("");
 
-    const tableHTML = `
-      <div class="ltc-card">
-        <table class="ltc-table">
-          ${headerHTML}
-          <tbody>
-            ${rowsHTML}
-          </tbody>
-        </table>
-        ${this._renderLegend(topBg, euBg, bottomBg)}
+    const legend = `
+      <div class="legend">
+        <span class="legend-box" style="background:${cfg.highlight.top_color}"></span> TOP 2 (Liga Mistrzów)
+        <span class="legend-box" style="background:${cfg.highlight.conf_color}"></span> 3–4 (Liga Konferencji)
+        <span class="legend-box" style="background:${cfg.highlight.bottom_color}"></span> Spadek (ostatnie 3)
       </div>
     `;
 
+    const header = this.config.show_name ? `header="${this.config.name}"` : "";
+
     if (this.config.lite_mode) {
-      this.innerHTML = `
-        ${style}
-        ${tableHTML}
-      `;
+      this.innerHTML = `${style}<table><tbody>${rows}</tbody></table>${legend}`;
       return;
     }
 
-    const cardName =
-      this.config.show_name === false
-        ? ""
-        : this.config.name ||
-          stateObj.attributes.friendly_name ||
-          "Tabela ligowa";
-
     this.innerHTML = `
       ${style}
-      <ha-card ${cardName ? `header="${cardName}"` : ""}>
-        ${tableHTML}
+      <ha-card ${header}>
+        <table>
+          <thead>
+            <tr>
+              <th>Poz</th>
+              <th>Drużyna</th>
+              <th>M</th>
+              <th>Pkt</th>
+              <th>Bramki</th>
+              <th>+/-</th>
+            </tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+        ${legend}
       </ha-card>
     `;
   }
-
-  // -------------------------------------------------
-  // POJEDYNCZY WIERSZ
-  // -------------------------------------------------
-  _renderRow(row, myPosition, totalTeams) {
-    const cfg = this.config;
-    const hl = cfg.highlight;
-
-    const pos = row.position ? parseInt(row.position, 10) : null;
-
-    const isFavorite =
-      hl.favorite && myPosition != null && pos === myPosition;
-
-    const isTop =
-      hl.top_count > 0 &&
-      pos != null &&
-      pos >= 1 &&
-      pos <= hl.top_count;
-
-    const isEU =
-      hl.eu_count > 0 &&
-      pos != null &&
-      pos > hl.top_count &&
-      pos <= hl.top_count + hl.eu_count;
-
-    const isBottom =
-      hl.bottom_count > 0 &&
-      pos != null &&
-      totalTeams > 0 &&
-      pos > totalTeams - hl.bottom_count;
-
-    let rowClass = "";
-    if (isFavorite) {
-      rowClass = "ltc-row-favorite";
-    } else if (isTop) {
-      rowClass = "ltc-row-top";
-    } else if (isEU) {
-      rowClass = "ltc-row-eu";
-    } else if (isBottom) {
-      rowClass = "ltc-row-bottom";
-    }
-
-    const matches = row.matches ?? "-";
-    const points = row.points ?? "-";
-    const goals = row.goals ?? "-";
-
-    let diff = row.diff;
-    let diffStr = "-";
-    if (diff !== undefined && diff !== null && diff !== "") {
-      const n = typeof diff === "number" ? diff : parseInt(diff, 10);
-      if (!isNaN(n)) {
-        diffStr = (n > 0 ? "+" : "") + n;
-      } else {
-        diffStr = String(diff);
-      }
-    }
-
-    const teamName = row.team || "";
-
-    let trendHTML = "";
-    if (cfg.show_trend) {
-      trendHTML = this._renderTrend(row.trend);
-    }
-
-    return `
-      <tr class="${rowClass}">
-        <td class="ltc-col-pos">${pos != null && !isNaN(pos) ? pos : ""}</td>
-        <td class="ltc-col-team">
-          <span class="ltc-team-name">${teamName}</span>
-        </td>
-        <td class="ltc-col-m">${matches}</td>
-        <td class="ltc-col-pkt">${points}</td>
-        <td class="ltc-col-goals">${goals}</td>
-        <td class="ltc-col-diff">${diffStr}</td>
-        ${
-          cfg.show_trend
-            ? `<td class="ltc-col-trend">${trendHTML}</td>`
-            : ""
-        }
-      </tr>
-    `;
-  }
-
-  _renderTrend(trend) {
-    if (!trend) return "";
-
-    const t = String(trend).toLowerCase().trim();
-
-    if (t === "up" || t === "+" || t === "↑" || t === "▲") {
-      return `<span class="ltc-trend-up">▲</span>`;
-    }
-    if (t === "down" || t === "-" || t === "↓" || t === "▼") {
-      return `<span class="ltc-trend-down">▼</span>`;
-    }
-    if (t === "same" || t === "0" || t === "=" || t === "→") {
-      return `<span class="ltc-trend-same">━</span>`;
-    }
-
-    return `<span>${trend}</span>`;
-  }
-
-  // -------------------------------------------------
-  // LEGENDA (Top2 / 3–4 / spadek)
-  // -------------------------------------------------
-  _renderLegend(topBg, euBg, bottomBg) {
-    return `
-      <div class="ltc-legend">
-        <div class="ltc-legend-item">
-          <span class="ltc-legend-box" style="background:${topBg};"></span>
-          <span>Top 2 – Liga Mistrzów</span>
-        </div>
-        <div class="ltc-legend-item">
-          <span class="ltc-legend-box" style="background:${euBg};"></span>
-          <span>3–4 – Liga Konferencji</span>
-        </div>
-        <div class="ltc-legend-item">
-          <span class="ltc-legend-box" style="background:${bottomBg};"></span>
-          <span>3 ostatnie – Spadek</span>
-        </div>
-      </div>
-    `;
-  }
-
-  // -------------------------------------------------
-  // HELPERY
-  // -------------------------------------------------
-  _withAlpha(hex, alpha) {
-    const a =
-      typeof alpha === "number" && alpha >= 0 && alpha <= 1 ? alpha : 0.55;
-    const h = (hex || "").replace("#", "");
-    if (h.length !== 6) return `rgba(0,0,0,${a})`;
-
-    const r = parseInt(h.substring(0, 2), 16);
-    const g = parseInt(h.substring(2, 4), 16);
-    const b = parseInt(h.substring(4, 6), 16);
-
-    if (Number.isNaN(r) || Number.isNaN(g) || Number.isNaN(b)) {
-      return `rgba(0,0,0,${a})`;
-    }
-
-    return `rgba(${r},${g},${b},${a})`;
-  }
-
-  static getConfigElement() {
-    return document.createElement("league-table-card-editor");
-  }
-
-  static getStubConfig() {
-    return {
-      entity: "sensor.90minut_gornik_zabrze_table",
-    };
-  }
-
-  getCardSize() {
-    return 5;
-  }
 }
 
-if (!customElements.get("league-table-card")) {
-  customElements.define("league-table-card", LeagueTableCard);
-}
+customElements.define("league-table-card", LeagueTableCard);
 
 window.customCards = window.customCards || [];
 window.customCards.push({
   type: "league-table-card",
   name: "League Table Card (90minut)",
-  description: "Tabela ligowa na podstawie sensora 90minut.pl",
+  description: "Tabela ligowa bez trendu"
 });
 // ===== FILE INCLUDED: dist/matches-card-editor.js =====
 // ============================================================================
-//  Matches Card Editor – FULL LIVE-BINDING, DEBOUNCE, SEKCJE, INPUT-NUMBERS
+//  Matches Card Editor – FIXED (value binding + working config-changed)
 // ============================================================================
 
 class MatchesCardEditor extends HTMLElement {
+
   constructor() {
     super();
     this.attachShadow({ mode: "open" });
@@ -696,81 +379,26 @@ class MatchesCardEditor extends HTMLElement {
   }
 
   setConfig(config) {
-    this._config = JSON.parse(JSON.stringify(config || {}));
+    this._config = JSON.parse(JSON.stringify(config));
     this.render();
   }
 
-  // -----------------------------------------
-  //  Emit config-changed (with debounce)
-  // -----------------------------------------
-  _update(path, value) {
-    let target = this._config;
-
-    // obsługa obiektów zagnieżdżonych (font_size.xxx, gradient.xxx itp.)
-    if (path.includes(".")) {
-      const parts = path.split(".");
-      for (let i = 0; i < parts.length - 1; i++) {
-        if (!target[parts[i]]) target[parts[i]] = {};
-        target = target[parts[i]];
-      }
-      target[parts.at(-1)] = value;
-    } else {
-      this._config[path] = value;
-    }
+  _debounceUpdate(key, value) {
+    this._config[key] = value;
 
     clearTimeout(this._debounce);
     this._debounce = setTimeout(() => {
       this.dispatchEvent(
         new CustomEvent("config-changed", {
-          detail: { config: this._config },
-          bubbles: true,
-          composed: true,
+          detail: { config: this._config }
         })
       );
     }, 700);
   }
 
-  // -----------------------------------------
-  // Helpers
-  // -----------------------------------------
-  _numInput(path, label, value, min = null, max = null, step = 1) {
-    return `
-      <label>
-        ${label}
-        <input type="number"
-               value="${value}"
-               ${min !== null ? `min="${min}"` : ""}
-               ${max !== null ? `max="${max}"` : ""}
-               step="${step}"
-               data-path="${path}">
-      </label>
-    `;
-  }
-
-  _colorInput(path, label, value) {
-    return `
-      <label>
-        ${label}
-        <input type="color"
-               value="${value}"
-               data-path="${path}">
-      </label>
-    `;
-  }
-
-  _switch(path, label, checked) {
-    return `
-      <label class="switch-row">
-        <span>${label}</span>
-        <ha-switch data-path="${path}" ?checked="${checked}"></ha-switch>
-      </label>
-    `;
-  }
-
-  // -----------------------------------------
-  // RENDER
-  // -----------------------------------------
   render() {
+    if (!this.shadowRoot) return;
+
     const c = this._config;
 
     this.shadowRoot.innerHTML = `
@@ -778,161 +406,159 @@ class MatchesCardEditor extends HTMLElement {
         .group {
           margin: 12px 0;
           border-radius: 8px;
-          border: 1px solid rgba(150,150,150,0.25);
+          border: 1px solid rgba(255,255,255,0.15);
           overflow: hidden;
         }
-        summary {
+        .group summary {
           padding: 10px 12px;
+          font-size: 1rem;
           cursor: pointer;
           background: rgba(255,255,255,0.05);
         }
-        .inner {
-          padding: 14px 18px;
+        .group > div {
+          padding: 10px 16px 18px 16px;
           display: grid;
           grid-template-columns: 1fr 1fr;
-          gap: 14px;
+          gap: 12px;
         }
-        label {
-          display: flex;
-          flex-direction: column;
-          font-size: 0.82rem;
-        }
-        .switch-row {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-        }
-        input[type="number"],
-        select {
-          padding: 6px;
+        label { font-size: 0.85rem; display:flex; flex-direction:column; }
+        input[type="number"], input[type="text"] {
+          padding: 4px 6px;
           border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.25);
-          background: rgba(0,0,0,0.15);
+          border: 1px solid rgba(255,255,255,0.20);
+          background: rgba(0,0,0,0.2);
           color: inherit;
-        }
-        input[type="color"] {
-          width: 38px;
-          height: 28px;
-          padding: 0;
-          border: none;
-          background: transparent;
         }
       </style>
 
-      <!-- PODSTAWOWE -->
       <details class="group" open>
         <summary>Podstawowe</summary>
-        <div class="inner">
-
+        <div>
           <label>
             Nazwa karty
-            <input type="text" data-path="name" value="${c.name ?? ""}">
+            <input id="name" type="text" value="${c.name ?? ''}">
           </label>
-
-          ${this._switch("show_logos", "Pokaż herby", c.show_logos !== false)}
-          ${this._switch("full_team_names", "Pełne nazwy", c.full_team_names !== false)}
-          ${this._switch("show_result_symbols", "Pokaż W/D/L", c.show_result_symbols !== false)}
-          ${this._switch("lite_mode", "Tryb LITE", c.lite_mode === true)}
-
-        </div>
-      </details>
-
-      <!-- FILL MODE -->
-      <details class="group">
-        <summary>Styl wypełnienia</summary>
-        <div class="inner">
 
           <label>
-            Tryb
-            <select data-path="fill_mode">
-              <option value="gradient" ${c.fill_mode === "gradient" ? "selected" : ""}>Gradient</option>
-              <option value="zebra" ${c.fill_mode === "zebra" ? "selected" : ""}>Zebra</option>
-              <option value="clear" ${c.fill_mode === "clear" ? "selected" : ""}>Brak</option>
-            </select>
+            Pokaż herby
+            <ha-switch id="show_logos" ?checked="${c.show_logos !== false}"></ha-switch>
           </label>
 
-          ${c.fill_mode === "gradient" ? `
-            ${this._numInput("gradient.start", "Start (%)", c.gradient?.start ?? 35, 0, 100)}
-            ${this._numInput("gradient.end", "Koniec (%)", c.gradient?.end ?? 100, 0, 100)}
-            ${this._numInput("gradient.alpha_start", "Alfa start", c.gradient?.alpha_start ?? 0, 0, 1, 0.05)}
-            ${this._numInput("gradient.alpha_end", "Alfa koniec", c.gradient?.alpha_end ?? 0.55, 0, 1, 0.05)}
-          ` : ""}
+          <label>
+            Pełne nazwy
+            <ha-switch id="full_team_names" ?checked="${c.full_team_names !== false}"></ha-switch>
+          </label>
 
-          ${c.fill_mode === "zebra" ? `
-            ${this._colorInput("zebra_color", "Kolor zebry", c.zebra_color ?? "#f0f0f0")}
-            ${this._numInput("zebra_alpha", "Alfa zebry", c.zebra_alpha ?? 0.4, 0, 1, 0.05)}
-          ` : ""}
+          <label>
+            W/D/L symbole
+            <ha-switch id="show_result_symbols" ?checked="${c.show_result_symbols !== false}"></ha-switch>
+          </label>
+
+          <label>
+            Tryb LITE
+            <ha-switch id="lite_mode" ?checked="${c.lite_mode === true}"></ha-switch>
+          </label>
         </div>
       </details>
 
-      <!-- FONT SIZES -->
       <details class="group">
-        <summary>Rozmiary czcionek</summary>
-        <div class="inner">
-          ${this._numInput("font_size.date", "Data", c.font_size?.date ?? 0.9, 0.1, 3, 0.1)}
-          ${this._numInput("font_size.status", "Status", c.font_size?.status ?? 0.8, 0.1, 3, 0.1)}
-          ${this._numInput("font_size.teams", "Nazwy drużyn", c.font_size?.teams ?? 1.0, 0.1, 3, 0.1)}
-          ${this._numInput("font_size.score", "Wynik", c.font_size?.score ?? 1.0, 0.1, 3, 0.1)}
+        <summary>Czcionki</summary>
+        <div>
+          <label>Data
+            <input id="date" type="number" step="0.1" value="${c.font_size?.date ?? 0.9}">
+          </label>
+
+          <label>Status
+            <input id="status" type="number" step="0.1" value="${c.font_size?.status ?? 0.8}">
+          </label>
+
+          <label>Drużyny
+            <input id="teams" type="number" step="0.1" value="${c.font_size?.teams ?? 1.0}">
+          </label>
+
+          <label>Wynik
+            <input id="score" type="number" step="0.1" value="${c.font_size?.score ?? 1.0}">
+          </label>
         </div>
       </details>
 
-      <!-- IKONY -->
       <details class="group">
-        <summary>Rozmiary ikon</summary>
-        <div class="inner">
-          ${this._numInput("icon_size.league", "Liga", c.icon_size?.league ?? 26, 10, 60)}
-          ${this._numInput("icon_size.crest", "Herby", c.icon_size?.crest ?? 24, 10, 60)}
-          ${this._numInput("icon_size.result", "W/D/L", c.icon_size?.result ?? 26, 10, 60)}
-        </div>
-      </details>
-
-      <!-- KOLORY -->
-      <details class="group">
-        <summary>Kolory wyników</summary>
-        <div class="inner">
-          ${this._colorInput("colors.win", "Wygrana (W)", c.colors?.win ?? "#3ba55d")}
-          ${this._colorInput("colors.draw", "Remis (D)", c.colors?.draw ?? "#468cd2")}
-          ${this._colorInput("colors.loss", "Porażka (L)", c.colors?.loss ?? "#e23b3b")}
+        <summary>Ikony</summary>
+        <div>
+          <label>Liga
+            <input id="league" type="number" value="${c.icon_size?.league ?? 26}">
+          </label>
+          <label>Herby
+            <input id="crest" type="number" value="${c.icon_size?.crest ?? 24}">
+          </label>
+          <label>W/D/L
+            <input id="result" type="number" value="${c.icon_size?.result ?? 26}">
+          </label>
         </div>
       </details>
     `;
 
-    // binduję wszystkie inputy
-    this._bindAll();
-  }
+    // ===============================
+    //  BIND INPUTS → CONFIG
+    // ===============================
+    const bind = (id, key, nested = null) => {
+      const el = this.shadowRoot.getElementById(id);
+      if (!el) return;
 
-  // -----------------------------------------
-  // Bind handlers
-  // -----------------------------------------
-  _bindAll() {
-    this.shadowRoot.querySelectorAll("input, select, ha-switch").forEach(el => {
-      el.addEventListener("input", () => {
-        const path = el.dataset.path;
-        if (!path) return;
-
-        const value =
-          el.type === "number" ? Number(el.value) :
-          el.tagName === "HA-SWITCH" ? el.checked :
-          el.value;
-
-        this._update(path, value);
+      el.addEventListener("input", (e) => {
+        if (nested) {
+          this._config[nested][key] = Number(e.target.value);
+          this._debounceUpdate(nested, { ...this._config[nested] });
+        } else {
+          this._debounceUpdate(key, e.target.type === "number"
+            ? Number(e.target.value)
+            : e.target.value);
+        }
       });
-    });
+
+      el.addEventListener("change", (e) => {
+        if (nested) {
+          this._config[nested][key] = Number(e.target.value);
+          this._debounceUpdate(nested, { ...this._config[nested] });
+        } else {
+          this._debounceUpdate(key, e.target.checked ?? e.target.value);
+        }
+      });
+    };
+
+    // PODSTAWOWE
+    bind("name", "name");
+    bind("show_logos", "show_logos");
+    bind("full_team_names", "full_team_names");
+    bind("show_result_symbols", "show_result_symbols");
+    bind("lite_mode", "lite_mode");
+
+    // FONTS
+    bind("date", "date", "font_size");
+    bind("status", "status", "font_size");
+    bind("teams", "teams", "font_size");
+    bind("score", "score", "font_size");
+
+    // ICONS
+    bind("league", "league", "icon_size");
+    bind("crest", "crest", "icon_size");
+    bind("result", "result", "icon_size");
   }
+
+  static getConfigElement() { return this; }
+  static getStubConfig() { return {}; }
 }
 
 customElements.define("matches-card-editor", MatchesCardEditor);
 // ===== FILE INCLUDED: dist/matches-card.js =====
 // ============================================================================
-//  Matches Card (90minut) – v0.3.000 + FIXED STATUS (no undefined)
+//  Matches Card (90minut) – v0.3.000 (RESTORED BASE) + FIXES
 // ============================================================================
 
 class MatchesCard extends HTMLElement {
 
   setConfig(config) {
-    if (!config.entity) {
-      throw new Error("Entity is required");
-    }
+    if (!config.entity) throw new Error("Entity is required");
 
     this.config = {
       name: "90minut Matches",
@@ -959,19 +585,18 @@ class MatchesCard extends HTMLElement {
       colors: {
         win: config.colors?.win ?? "#3ba55d",
         draw: config.colors?.draw ?? "#468cd2",
-        loss: config.colors?.loss ?? "#e23b3b"
+        loss: config.colors?.loss ?? "#e23b3b",
       },
 
       gradient: {
         start: config.gradient?.start ?? 35,
-        end:   config.gradient?.end   ?? 100,
+        end: config.gradient?.end ?? 100,
         alpha_start: config.gradient?.alpha_start ?? 0.0,
-        alpha_end:   config.gradient?.alpha_end   ?? 0.55
+        alpha_end: config.gradient?.alpha_end ?? 0.55,
       },
 
       zebra_color: config.zebra_color ?? "#f0f0f0",
       zebra_alpha: config.zebra_alpha ?? 0.4,
-
       lite_mode: config.lite_mode ?? false,
 
       ...config
@@ -1023,7 +648,9 @@ class MatchesCard extends HTMLElement {
         }
 
         .crest-cell {
-          gap:3px;
+          display:flex;
+          flex-direction:column;
+          gap:4px;
         }
 
         .league-cell {
@@ -1056,9 +683,9 @@ class MatchesCard extends HTMLElement {
           width:${this.config.icon_size.result}px;
           height:${this.config.icon_size.result}px;
           display:flex;
-          align-items:center;
           justify-content:center;
-          color:#fff;
+          align-items:center;
+          color:white;
           font-weight:bold;
           margin:auto;
         }
@@ -1090,13 +717,15 @@ class MatchesCard extends HTMLElement {
     const homeBold = m.result === "win" ? "bold" : m.result === "loss" ? "dim" : "";
     const awayBold = m.result === "loss" ? "bold" : m.result === "win" ? "dim" : "";
 
+    const statusStr = m.status || m.competition || "";
+
     return `
       <tr style="${this._gradient(m)}">
 
         <!-- DATA -->
         <td style="width:10%; text-align:center;">
           <div style="font-size:${this.config.font_size.date}rem">${m.date}</div>
-          <div style="font-size:${this.config.font_size.status}rem">${m.status ?? ""}</div>
+          <div style="font-size:${this.config.font_size.status}rem">${statusStr}</div>
         </td>
 
         <!-- LIGA -->
@@ -1106,9 +735,9 @@ class MatchesCard extends HTMLElement {
 
         <!-- HERBY -->
         ${this.config.show_logos ? `
-          <td class="crest-cell dual-cell" style="width:10%;">
-            <img src="${m.logo_home}" height="${this.config.icon_size.crest}" />
-            <img src="${m.logo_away}" height="${this.config.icon_size.crest}" />
+          <td class="crest-cell" style="width:10%;">
+            <img src="${m.logo_home}" height="${this.config.icon_size.crest}">
+            <img src="${m.logo_away}" height="${this.config.icon_size.crest}">
           </td>
         ` : ""}
 
@@ -1124,7 +753,7 @@ class MatchesCard extends HTMLElement {
           <div class="${awayBold}" style="font-size:${this.config.font_size.score}rem">${awayScore}</div>
         </td>
 
-        <!-- SYMBOL W/P/R -->
+        <!-- W/D/L -->
         <td class="result-cell" style="width:8%;">
           ${this.config.show_result_symbols && m.result ? `
             <div class="result-circle" style="background:${this.config.colors[m.result]}">
@@ -1155,14 +784,14 @@ class MatchesCard extends HTMLElement {
 
   _league(code) {
     const file =
-      code === "L"  ? "ekstraklasa.png" :
+      code === "L" ? "ekstraklasa.png" :
       code === "PP" ? "puchar.png" :
       null;
 
     if (!file) return `<div>${code}</div>`;
 
     return `<img src="https://raw.githubusercontent.com/GieOeRZet/matches-card/main/logo/${file}"
-                height="${this.config.icon_size.league}" />`;
+                height="${this.config.icon_size.league}">`;
   }
 
   _rgba(hex, alpha) {
@@ -1183,5 +812,5 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "matches-card",
   name: "Matches Card (90minut)",
-  description: "Karta pokazująca mecze z sensora 90minut.pl"
+  description: "Karta pokazująca mecze 90minut.pl"
 });
