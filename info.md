@@ -1,4 +1,4 @@
-[README.md](https://github.com/user-attachments/files/23591611/README.md)
+
 
 # 🇵🇱 Matches Card & League Table Card (90minut)
 
