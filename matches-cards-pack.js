@@ -1,12 +1,13 @@
-// Matches Cards Pack – version 0.3.202
+// Matches Cards Pack – version 0.3.203
 // Auto-generated from dist/
 
 // ===== FILE INCLUDED: dist/league-table-card-editor.js =====
 // ============================================================================
-//  League Table Card Editor (90minut)
-//  - Vanilla JS (bez lit)
-//  - Sekcje: Podstawowe / Styl wierszy / Podświetlenia / Czcionki
-//  - Debounce dla pól liczbowych/tekstowych (~700 ms)
+//  League Table Card Editor – Premium Gradient Edition
+//  - Pełna zgodność z YAML
+//  - Tryby: gradient, premium, zebra, clear
+//  - Premium: start_alpha / mid_alpha / end_alpha / pastel_pos
+//  - Debounce 700 ms
 // ============================================================================
 
 class LeagueTableCardEditor extends HTMLElement {
@@ -17,101 +18,89 @@ class LeagueTableCardEditor extends HTMLElement {
     this._debounce = null;
   }
 
-  // ------------------------------------------------
-  //  HA wywołuje setConfig z aktualnym YAML-em
-  // ------------------------------------------------
   setConfig(config) {
-    const cfg = config || {};
-
     const defaults = {
       name: "Tabela ligowa",
       show_name: true,
       lite_mode: false,
-      show_trend: true,
-      fill_mode: "gradient", // gradient / zebra / clear
+
+      fill_mode: "gradient", // gradient | premium | zebra | clear
+
+      gradient: {
+        start: 35,
+        end: 100,
+        alpha_start: 0.0,
+        alpha_end: 0.55,
+      },
+
+      premium: {
+        start_alpha: 0.85,
+        mid_alpha: 0.35,
+        end_alpha: 0.0,
+        pastel_pos: 15,
+      },
+
+      zebra_color: "#f0f0f0",
+      zebra_alpha: 0.4,
+
+      highlight: {
+        top_count: 2,
+        conf_count: 2,
+        bottom_count: 3,
+      },
+
+      colors: {
+        top: "#3ba55d",
+        conf: "#468cd2",
+        bottom: "#e23b3b",
+      },
+
       font_size: {
         header: 0.8,
         row: 0.9,
         team: 1.0,
       },
-      highlight: {
-        favorite: true,
-        top_count: 2,
-        bottom_count: 3,
-        top_color: "#3ba55d",    // LM
-        conf_color: "#468cd2",   // LK
-        bottom_color: "#e23b3b", // spadek
-        alpha_start: 0.0,
-        alpha_end: 0.55,
-      },
-      zebra_color: "#f0f0f0",
-      zebra_alpha: 0.4,
     };
 
-    // Głębokie scalanie z domyślnymi
     this._config = {
       ...defaults,
-      ...cfg,
-      font_size: { ...defaults.font_size, ...(cfg.font_size || {}) },
-      highlight: { ...defaults.highlight, ...(cfg.highlight || {}) },
+      ...config,
+      gradient: { ...defaults.gradient, ...(config.gradient || {}) },
+      premium: { ...defaults.premium, ...(config.premium || {}) },
+      highlight: { ...defaults.highlight, ...(config.highlight || {}) },
+      colors: { ...defaults.colors, ...(config.colors || {}) },
+      font_size: { ...defaults.font_size, ...(config.font_size || {}) },
     };
-
-    if (typeof this._config.fill_mode !== "string") {
-      this._config.fill_mode = "gradient";
-    }
 
     this._render();
   }
 
-  // ------------------------------------------------
-  //  Debounce + wysyłanie config-changed
-  // ------------------------------------------------
-  _scheduleApply(immediate = false) {
-    if (immediate) {
-      clearTimeout(this._debounce);
-      this._apply();
-      return;
-    }
-
+  _scheduleApply() {
     clearTimeout(this._debounce);
     this._debounce = setTimeout(() => this._apply(), 700);
   }
 
   _apply() {
-    const ev = new CustomEvent("config-changed", {
-      detail: { config: this._config },
-      bubbles: true,
-      composed: true,
-    });
-    this.dispatchEvent(ev);
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
-  // ------------------------------------------------
-  //  Aktualizacje configu
-  // ------------------------------------------------
-  _updateRoot(key, value, immediate = false) {
-    this._config = {
-      ...this._config,
-      [key]: value,
-    };
-    this._scheduleApply(immediate);
+  _updateRoot(key, value) {
+    this._config[key] = value;
+    this._scheduleApply();
   }
 
-  _updateNested(group, key, value, immediate = false) {
-    const nested = { ...(this._config[group] || {}) };
-    nested[key] = value;
-    this._config = {
-      ...this._config,
-      [group]: nested,
-    };
-    this._scheduleApply(immediate);
+  _updateNested(group, key, value) {
+    this._config[group][key] = value;
+    this._scheduleApply();
   }
 
-  // ------------------------------------------------
-  //  Render UI
-  // ------------------------------------------------
   _render() {
-    if (!this.shadowRoot) return;
     const c = this._config;
 
     this.shadowRoot.innerHTML = `
@@ -119,38 +108,34 @@ class LeagueTableCardEditor extends HTMLElement {
         .group {
           margin: 12px 0;
           border-radius: 8px;
-          border: 1px solid rgba(255,255,255,0.15);
-          overflow: hidden;
+          border: 1px solid rgba(255,255,255,0.2);
         }
-
         .group summary {
           padding: 10px 12px;
           font-size: 1rem;
           cursor: pointer;
           background: rgba(255,255,255,0.05);
         }
-
         .group > div {
-          padding: 10px 16px 18px 16px;
+          padding: 12px 16px 14px 16px;
           display: grid;
-          grid-template-columns: 1fr 1fr;
           gap: 12px;
+          grid-template-columns: 1fr 1fr;
         }
 
         label {
           display: flex;
           flex-direction: column;
-          font-size: 0.85rem;
-          opacity: 0.9;
+          font-size: 0.9rem;
         }
 
-        input[type="number"],
         input[type="text"],
+        input[type="number"],
         select {
           margin-top: 4px;
-          padding: 4px 6px;
+          padding: 6px;
           border-radius: 6px;
-          border: 1px solid rgba(255,255,255,0.20);
+          border: 1px solid rgba(255,255,255,0.2);
           background: rgba(0,0,0,0.2);
           color: inherit;
         }
@@ -159,7 +144,6 @@ class LeagueTableCardEditor extends HTMLElement {
           margin-top: 4px;
           width: 40px;
           height: 28px;
-          padding: 0;
           border: none;
           background: transparent;
         }
@@ -168,18 +152,6 @@ class LeagueTableCardEditor extends HTMLElement {
           display: flex;
           align-items: center;
           gap: 10px;
-          font-size: 0.9rem;
-        }
-
-        .switch-row span {
-          opacity: 0.9;
-        }
-
-        .legend-hint {
-          font-size: 0.8rem;
-          opacity: 0.7;
-          grid-column: 1 / -1;
-          margin-top: 4px;
         }
       </style>
 
@@ -189,162 +161,143 @@ class LeagueTableCardEditor extends HTMLElement {
         <div>
           <label>
             Nazwa karty
-            <input type="text"
-                   data-root-key="name"
-                   value="${c.name ?? ""}">
+            <input type="text" data-root="name" value="${c.name}">
           </label>
 
           <div class="switch-row">
-            <ha-switch data-root-key="show_name" ${c.show_name !== false ? "checked" : ""}></ha-switch>
+            <ha-switch data-root="show_name" ${c.show_name ? "checked" : ""}></ha-switch>
             <span>Pokaż nagłówek</span>
           </div>
 
           <div class="switch-row">
-            <ha-switch data-root-key="lite_mode" ${c.lite_mode === true ? "checked" : ""}></ha-switch>
-            <span>Tryb LITE (bez tła ha-card)</span>
-          </div>
-
-          <div class="switch-row">
-            <ha-switch data-root-key="show_trend" ${c.show_trend !== false ? "checked" : ""}></ha-switch>
-            <span>Pokaż kolumnę trendu</span>
+            <ha-switch data-root="lite_mode" ${c.lite_mode ? "checked" : ""}></ha-switch>
+            <span>Tryb LITE</span>
           </div>
         </div>
       </details>
 
+
       <!-- STYL WIERSZY -->
       <details class="group">
-        <summary>Styl wierszy (wypełnienie)</summary>
+        <summary>Styl wierszy</summary>
         <div>
+
           <label>
-            Tryb wypełnienia
-            <select data-root-key="fill_mode">
+            Tryb
+            <select data-root="fill_mode">
               <option value="gradient" ${c.fill_mode === "gradient" ? "selected" : ""}>Gradient</option>
+              <option value="premium" ${c.fill_mode === "premium" ? "selected" : ""}>Premium gradient</option>
               <option value="zebra" ${c.fill_mode === "zebra" ? "selected" : ""}>Zebra</option>
               <option value="clear" ${c.fill_mode === "clear" ? "selected" : ""}>Brak</option>
             </select>
           </label>
 
-          ${c.fill_mode === "gradient" ? `
-            <label>
-              Start gradientu (%)
-              <input type="number" min="0" max="100"
-                     data-group="highlight" data-key="start"
-                     value="${c.highlight?.start ?? 35}">
-            </label>
+          ${
+            c.fill_mode === "gradient"
+              ? `
+          <label>Start %
+            <input type="number" min="0" max="100" data-group="gradient" data-key="start" value="${c.gradient.start}">
+          </label>
 
-            <label>
-              Koniec gradientu (%)
-              <input type="number" min="0" max="100"
-                     data-group="highlight" data-key="end"
-                     value="${c.highlight?.end ?? 100}">
-            </label>
+          <label>Koniec %
+            <input type="number" min="0" max="100" data-group="gradient" data-key="end" value="${c.gradient.end}">
+          </label>
 
-            <label>
-              Alfa start
-              <input type="number" min="0" max="1" step="0.05"
-                     data-group="highlight" data-key="alpha_start"
-                     value="${c.highlight?.alpha_start ?? 0}">
-            </label>
+          <label>Alfa start
+            <input type="number" min="0" max="1" step="0.05" data-group="gradient" data-key="alpha_start" value="${c.gradient.alpha_start}">
+          </label>
 
-            <label>
-              Alfa koniec
-              <input type="number" min="0" max="1" step="0.05"
-                     data-group="highlight" data-key="alpha_end"
-                     value="${c.highlight?.alpha_end ?? 0.55}">
-            </label>
-          ` : ""}
+          <label>Alfa koniec
+            <input type="number" min="0" max="1" step="0.05" data-group="gradient" data-key="alpha_end" value="${c.gradient.alpha_end}">
+          </label>
+          `
+              : ""
+          }
 
-          ${c.fill_mode === "zebra" ? `
-            <label>
-              Kolor wierszy parzystych
-              <input type="color"
-                     data-root-key="zebra_color"
-                     value="${c.zebra_color ?? "#f0f0f0"}">
-            </label>
+          ${
+            c.fill_mode === "premium"
+              ? `
+          <label>Moc startowa
+            <input type="number" min="0" max="1" step="0.05" data-group="premium" data-key="start_alpha" value="${c.premium.start_alpha}">
+          </label>
 
-            <label>
-              Alfa zebry
-              <input type="number" min="0" max="1" step="0.05"
-                     data-root-key="zebra_alpha"
-                     value="${c.zebra_alpha ?? 0.4}">
-            </label>
-          ` : ""}
+          <label>Moc środkowa
+            <input type="number" min="0" max="1" step="0.05" data-group="premium" data-key="mid_alpha" value="${c.premium.mid_alpha}">
+          </label>
+
+          <label>Moc końcowa
+            <input type="number" min="0" max="1" step="0.05" data-group="premium" data-key="end_alpha" value="${c.premium.end_alpha}">
+          </label>
+
+          <label>Pozycja pastelowa %
+            <input type="number" min="0" max="100" step="1" data-group="premium" data-key="pastel_pos" value="${c.premium.pastel_pos}">
+          </label>
+          `
+              : ""
+          }
+
+          ${
+            c.fill_mode === "zebra"
+              ? `
+          <label>Kolor zebry
+            <input type="color" data-root="zebra_color" value="${c.zebra_color}">
+          </label>
+
+          <label>Alfa
+            <input type="number" min="0" max="1" step="0.05" data-root="zebra_alpha" value="${c.zebra_alpha}">
+          </label>
+          `
+              : ""
+          }
         </div>
       </details>
 
-      <!-- PODŚWIETLENIA (STREFY) -->
+
+      <!-- STREFY KOLORÓW -->
       <details class="group">
-        <summary>Strefy: LM / Liga Konferencji / Spadek</summary>
+        <summary>Strefy kolorystyczne</summary>
         <div>
-          <div class="switch-row">
-            <ha-switch data-group="highlight" data-key="favorite" ${c.highlight?.favorite !== false ? "checked" : ""}></ha-switch>
-            <span>Pogrub moją drużynę</span>
-          </div>
-
-          <label>
-            Drużyn w strefie "Liga Mistrzów"
-            <input type="number" min="0" max="10"
-                   data-group="highlight" data-key="top_count"
-                   value="${c.highlight?.top_count ?? 2}">
+          <label>TOP (LM)
+            <input type="color" data-group="colors" data-key="top" value="${c.colors.top}">
           </label>
 
-          <label>
-            Drużyn w strefie spadkowej
-            <input type="number" min="0" max="10"
-                   data-group="highlight" data-key="bottom_count"
-                   value="${c.highlight?.bottom_count ?? 3}">
+          <label>Conference (LKE)
+            <input type="color" data-group="colors" data-key="conf" value="${c.colors.conf}">
           </label>
 
-          <label>
-            Kolor: "Liga Mistrzów"
-            <input type="color"
-                   data-group="highlight" data-key="top_color"
-                   value="${c.highlight?.top_color ?? "#3ba55d"}">
+          <label>Spadek
+            <input type="color" data-group="colors" data-key="bottom" value="${c.colors.bottom}">
           </label>
 
-          <label>
-            Kolor: "Liga Konferencji"
-            <input type="color"
-                   data-group="highlight" data-key="conf_color"
-                   value="${c.highlight?.conf_color ?? "#468cd2"}">
+          <label>Liczba TOP
+            <input type="number" min="0" max="10" data-group="highlight" data-key="top_count" value="${c.highlight.top_count}">
           </label>
 
-          <label>
-            Kolor: "Spadek"
-            <input type="color"
-                   data-group="highlight" data-key="bottom_color"
-                   value="${c.highlight?.bottom_color ?? "#e23b3b"}">
+          <label>Liczba Conference
+            <input type="number" min="0" max="10" data-group="highlight" data-key="conf_count" value="${c.highlight.conf_count}">
           </label>
 
-          <div class="legend-hint">
-            Legenda na dole tabeli korzysta z powyższych kolorów.
-          </div>
+          <label>Liczba spadkowych
+            <input type="number" min="0" max="10" data-group="highlight" data-key="bottom_count" value="${c.highlight.bottom_count}">
+          </label>
         </div>
       </details>
+
 
       <!-- CZCIONKI -->
       <details class="group">
-        <summary>Rozmiary czcionek</summary>
+        <summary>Czcionki</summary>
         <div>
-          <label>
-            Nagłówek tabeli
-            <input type="number" step="0.1"
-                   data-group="font_size" data-key="header"
-                   value="${c.font_size?.header ?? 0.8}">
+          <label>Nagłówek
+            <input type="number" step="0.1" data-group="font_size" data-key="header" value="${c.font_size.header}">
           </label>
 
-          <label>
-            Wiersze
-            <input type="number" step="0.1"
-                   data-group="font_size" data-key="row"
-                   value="${c.font_size?.row ?? 0.9}">
+          <label>Wiersze
+            <input type="number" step="0.1" data-group="font_size" data-key="row" value="${c.font_size.row}">
           </label>
 
-          <label>
-            Nazwy drużyn
-            <input type="number" step="0.1"
-                   data-group="font_size" data-key="team"
-                   value="${c.font_size?.team ?? 1.0}">
+          <label>Nazwy drużyn
+            <input type="number" step="0.1" data-group="font_size" data-key="team" value="${c.font_size.team}">
           </label>
         </div>
       </details>
@@ -353,94 +306,58 @@ class LeagueTableCardEditor extends HTMLElement {
     this._attachListeners();
   }
 
-  // ------------------------------------------------
-  //  Listeners po wstrzyknięciu HTML
-  // ------------------------------------------------
   _attachListeners() {
     const root = this.shadowRoot;
-    if (!root) return;
 
-    // Top-level pola tekstowe/numeryczne/select
-    root.querySelectorAll("input[data-root-key], select[data-root-key]").forEach((el) => {
-      const key = el.getAttribute("data-root-key");
-      if (!key) return;
-
+    // ROOT
+    root.querySelectorAll("[data-root]").forEach((el) => {
+      const key = el.getAttribute("data-root");
       if (el.tagName.toLowerCase() === "ha-switch") {
-        // u mnie i tak nie wejdzie, bo ha-switch ma osobny handler niżej
-        return;
-      }
-
-      const isNumber = el.getAttribute("type") === "number";
-
-      const handler = (evt) => {
-        let val = isNumber ? Number(el.value) : el.value;
-        if (isNumber && Number.isNaN(val)) {
-          val = 0;
-        }
-        this._updateRoot(key, val, false);
-      };
-
-      el.addEventListener("input", handler);
-    });
-
-    // Top-level ha-switch
-    root.querySelectorAll("ha-switch[data-root-key]").forEach((sw) => {
-      const key = sw.getAttribute("data-root-key");
-      if (!key) return;
-
-      sw.addEventListener("change", () => {
-        this._updateRoot(key, sw.checked, true);
-      });
-    });
-
-    // Pólka zagnieżdżone (font_size, highlight, itp.)
-    root.querySelectorAll("input[data-group][data-key], select[data-group][data-key]").forEach((el) => {
-      const group = el.getAttribute("data-group");
-      const key = el.getAttribute("data-key");
-      if (!group || !key) return;
-
-      const tag = el.tagName.toLowerCase();
-      const isSwitch = tag === "ha-switch";
-      const isNumber = el.getAttribute("type") === "number";
-
-      if (isSwitch) {
         el.addEventListener("change", () => {
-          this._updateNested(group, key, el.checked, true);
+          this._updateRoot(key, el.checked);
         });
       } else {
-        const handler = () => {
-          let val = isNumber ? Number(el.value) : el.value;
-          if (isNumber && Number.isNaN(val)) {
-            val = 0;
-          }
-          this._updateNested(group, key, val, false);
-        };
-        el.addEventListener("input", handler);
+        el.addEventListener("input", () => {
+          const isNum = el.type === "number";
+          const val = isNum ? Number(el.value) : el.value;
+          this._updateRoot(key, val);
+        });
+      }
+    });
+
+    // NESTED
+    root.querySelectorAll("[data-group][data-key]").forEach((el) => {
+      const group = el.getAttribute("data-group");
+      const key = el.getAttribute("data-key");
+
+      if (el.tagName.toLowerCase() === "ha-switch") {
+        el.addEventListener("change", () => {
+          this._updateNested(group, key, el.checked);
+        });
+      } else {
+        el.addEventListener("input", () => {
+          const isNum = el.type === "number";
+          const val = isNum ? Number(el.value) : el.value;
+          this._updateNested(group, key, val);
+        });
       }
     });
   }
 }
 
 customElements.define("league-table-card-editor", LeagueTableCardEditor);
+
 // ===== FILE INCLUDED: dist/league-table-card.js =====
 // ============================================================================
-//  League Table Card (90minut) – v0.1.100
-//  - Gradient / Zebra jak w Matches Card
-//  - Domyślne kolory jak w meczach:
-//      top  (LM)   => #3ba55d
-//      conf (LKE)  => #468cd2
-//      bottom (sp) => #e23b3b
-//  - Moja drużyna: pogrubiona nazwa (bez specjalnego tła)
-//  - Legenda na dole (kolorowy kwadracik + opis)
-//  - Tryb LITE (bez ha-card, samo <table> + legenda)
+//  League Table Card (90minut) – v0.2.000
+//  + Premium Gradient (Sofascore-style)
+//  + Linia 3px z lewej (jak Matches Card)
 // ============================================================================
 
 class LeagueTableCard extends HTMLElement {
   setConfig(config) {
     if (!config.entity) {
-      throw new Error(
-        "Entity is required (np. sensor.90minut_gornik_zabrze_table)"
-      );
+      throw new Error("Entity is required (np. sensor.90minut_gornik_zabrze_table)");
     }
 
     const defaults = {
@@ -448,18 +365,26 @@ class LeagueTableCard extends HTMLElement {
       show_name: true,
       lite_mode: false,
 
-      // Gradient / Zebra – analogicznie do Matches Card
-      fill_mode: "gradient", // 'gradient' | 'zebra' | 'clear'
+      fill_mode: "gradient", // gradient | premium | zebra | clear
+
       gradient: {
         start: 35,
         end: 100,
         alpha_start: 0.0,
         alpha_end: 0.55,
       },
+
+      // PREMIUM GRADIENT – nowość
+      premium: {
+        start_alpha: 0.85,
+        mid_alpha: 0.35,
+        end_alpha: 0.0,
+        pastel_pos: 15,
+      },
+
       zebra_color: "#f0f0f0",
       zebra_alpha: 0.4,
 
-      // Pozycje i kolory (LM / LKE / Spadek)
       highlight: {
         top_count: 2,
         conf_count: 2,
@@ -467,9 +392,9 @@ class LeagueTableCard extends HTMLElement {
       },
 
       colors: {
-        top: "#3ba55d", // Liga Mistrzów
-        conf: "#468cd2", // Liga Konferencji
-        bottom: "#e23b3b", // Spadek
+        top: "#3ba55d",
+        conf: "#468cd2",
+        bottom: "#e23b3b",
       },
     };
 
@@ -477,6 +402,7 @@ class LeagueTableCard extends HTMLElement {
       ...defaults,
       ...config,
       gradient: { ...defaults.gradient, ...(config.gradient || {}) },
+      premium: { ...defaults.premium, ...(config.premium || {}) },
       highlight: { ...defaults.highlight, ...(config.highlight || {}) },
       colors: { ...defaults.colors, ...(config.colors || {}) },
     };
@@ -501,11 +427,8 @@ class LeagueTableCard extends HTMLElement {
     const table = stateObj.attributes.table || [];
     const totalTeams = table.length || 0;
 
-    const myPosAttr = stateObj.attributes.my_position;
-    this._myPosition =
-      myPosAttr != null && myPosAttr !== ""
-        ? parseInt(myPosAttr, 10)
-        : null;
+    const myPos = parseInt(stateObj.attributes.my_position || "", 10);
+    this._myPosition = !isNaN(myPos) ? myPos : null;
 
     const cfg = this.config;
 
@@ -514,28 +437,23 @@ class LeagueTableCard extends HTMLElement {
         .ltc-card {
           font-family: "Sofascore Sans", Arial, sans-serif;
         }
-
         table.ltc-table {
           width: 100%;
           border-collapse: collapse;
         }
-
         .ltc-table th,
         .ltc-table td {
           padding: 4px 6px;
           border-bottom: 1px solid rgba(0,0,0,0.08);
           font-size: 0.9rem;
           text-align: center;
-          vertical-align: middle;
           white-space: nowrap;
         }
-
         .ltc-table th {
           font-weight: 600;
           font-size: 0.8rem;
           opacity: 0.8;
         }
-
         .ltc-col-pos   { width: 8%;  text-align: right; }
         .ltc-col-team  { text-align: left; }
         .ltc-col-m     { width: 8%;  }
@@ -543,32 +461,23 @@ class LeagueTableCard extends HTMLElement {
         .ltc-col-goals { width: 14%; }
         .ltc-col-diff  { width: 10%; }
 
-        .ltc-team-name {
-          overflow: hidden;
-          text-overflow: ellipsis;
-        }
-
-        .ltc-team-fav {
-          font-weight: 700;
-        }
+        .ltc-team-name { overflow: hidden; text-overflow: ellipsis; }
+        .ltc-team-fav  { font-weight: 700; }
 
         .ltc-legend {
           margin-top: 10px;
           padding-top: 6px;
           border-top: 1px solid rgba(0,0,0,0.08);
           display: flex;
-          flex-wrap: wrap;
           gap: 16px;
+          flex-wrap: wrap;
           font-size: 0.8rem;
-          align-items: center;
         }
-
         .ltc-legend-item {
           display: flex;
           align-items: center;
           gap: 4px;
         }
-
         .ltc-legend-box {
           width: 12px;
           height: 12px;
@@ -579,9 +488,7 @@ class LeagueTableCard extends HTMLElement {
     `;
 
     const rowsHTML = table
-      .map((row, index) =>
-        this._renderRow(row, index, totalTeams)
-      )
+      .map((row, index) => this._renderRow(row, index, totalTeams))
       .join("");
 
     const headerHTML = `
@@ -600,16 +507,13 @@ class LeagueTableCard extends HTMLElement {
     const legendHTML = `
       <div class="ltc-legend">
         <div class="ltc-legend-item">
-          <span class="ltc-legend-box" style="background:${cfg.colors.top};"></span>
-          <span>Liga Mistrzów</span>
+          <span class="ltc-legend-box" style="background:${cfg.colors.top}"></span> Liga Mistrzów
         </div>
         <div class="ltc-legend-item">
-          <span class="ltc-legend-box" style="background:${cfg.colors.conf};"></span>
-          <span>Liga Konferencji</span>
+          <span class="ltc-legend-box" style="background:${cfg.colors.conf}"></span> Liga Konferencji
         </div>
         <div class="ltc-legend-item">
-          <span class="ltc-legend-box" style="background:${cfg.colors.bottom};"></span>
-          <span>Spadek</span>
+          <span class="ltc-legend-box" style="background:${cfg.colors.bottom}"></span> Spadek
         </div>
       </div>
     `;
@@ -618,9 +522,7 @@ class LeagueTableCard extends HTMLElement {
       <div class="ltc-card">
         <table class="ltc-table">
           ${headerHTML}
-          <tbody>
-            ${rowsHTML}
-          </tbody>
+          <tbody>${rowsHTML}</tbody>
         </table>
         ${legendHTML}
       </div>
@@ -631,12 +533,7 @@ class LeagueTableCard extends HTMLElement {
       return;
     }
 
-    const cardName =
-      cfg.show_name === false
-        ? ""
-        : cfg.name ||
-          stateObj.attributes.friendly_name ||
-          "Tabela ligowa";
+    const cardName = cfg.show_name ? (cfg.name || "Tabela ligowa") : "";
 
     this.innerHTML = `
       ${style}
@@ -648,52 +545,30 @@ class LeagueTableCard extends HTMLElement {
 
   _renderRow(row, index, totalTeams) {
     const cfg = this.config;
-    const pos =
-      row.position != null && row.position !== ""
-        ? parseInt(row.position, 10)
-        : null;
 
+    const pos = parseInt(row.position || "", 10);
     const classification = this._classifyPosition(pos, totalTeams);
-    const rowStyle = this._rowBackgroundStyle(
-      classification,
-      index
-    );
 
+    const style = this._rowBackgroundStyle(classification, index);
+
+    const team = row.team || "";
     const matches = row.matches ?? "-";
     const points = row.points ?? "-";
     const goals = row.goals ?? "-";
 
-    let diff = row.diff;
     let diffStr = "-";
-    if (diff !== undefined && diff !== null && diff !== "") {
-      const n =
-        typeof diff === "number" ? diff : parseInt(diff, 10);
-      if (!isNaN(n)) {
-        diffStr = (n > 0 ? "+" : "") + n;
-      } else {
-        diffStr = String(diff);
-      }
+    if (row.diff || row.diff === 0) {
+      const d = parseInt(row.diff);
+      diffStr = isNaN(d) ? row.diff : (d > 0 ? "+" + d : "" + d);
     }
 
-    const teamName = row.team || "";
-
-    const isFavorite =
-      this._myPosition != null &&
-      pos != null &&
-      pos === this._myPosition;
-
-    const teamClass = isFavorite
-      ? "ltc-team-name ltc-team-fav"
-      : "ltc-team-name";
+    const favClass =
+      pos === this._myPosition ? "ltc-team-name ltc-team-fav" : "ltc-team-name";
 
     return `
-      <tr style="${rowStyle}">
-        <td class="ltc-col-pos">
-          ${pos != null && !isNaN(pos) ? pos : ""}
-        </td>
-        <td class="ltc-col-team">
-          <span class="${teamClass}">${teamName}</span>
-        </td>
+      <tr style="${style}">
+        <td class="ltc-col-pos">${isNaN(pos) ? "" : pos}</td>
+        <td class="ltc-col-team"><span class="${favClass}">${team}</span></td>
         <td class="ltc-col-m">${matches}</td>
         <td class="ltc-col-pkt">${points}</td>
         <td class="ltc-col-goals">${goals}</td>
@@ -706,80 +581,64 @@ class LeagueTableCard extends HTMLElement {
     const h = this.config.highlight;
     if (!pos || !totalTeams) return null;
 
-    // TOP – Liga Mistrzów
-    if (pos >= 1 && pos <= h.top_count) return "top";
-
-    // Conference – Liga Konferencji
-    if (
-      pos > h.top_count &&
-      pos <= h.top_count + h.conf_count
-    ) {
-      return "conf";
-    }
-
-    // Bottom – Spadek
-    if (
-      h.bottom_count > 0 &&
-      pos > totalTeams - h.bottom_count
-    ) {
-      return "bottom";
-    }
-
+    if (pos <= h.top_count) return "top";
+    if (pos <= h.top_count + h.conf_count) return "conf";
+    if (pos > totalTeams - h.bottom_count) return "bottom";
     return null;
   }
 
   _rowBackgroundStyle(classification, index) {
     const cfg = this.config;
 
-    let style = "";
+    if (!classification) return "";
 
-    if (cfg.fill_mode === "gradient" && classification) {
-      const col = cfg.colors[classification];
-      const g = cfg.gradient;
-      style += `
-        background: linear-gradient(to right,
-          rgba(0,0,0,0) 0%,
-          ${this._rgba(col, g.alpha_start)} ${g.start}%,
-          ${this._rgba(col, g.alpha_end)} ${g.end}%,
-          rgba(0,0,0,0) 100%
-        );
-      `;
-      // delikatny lewy pasek w tym samym kolorze
-      style += `border-left: 3px solid ${col};`;
-      return style;
-    }
+    const c = this.config.colors[classification];
 
-    if (cfg.fill_mode === "zebra") {
-      if (index % 2 === 1) {
-        style += `background-color:${this._rgba(
-          cfg.zebra_color,
-          cfg.zebra_alpha
-        )};`;
-      }
-      if (classification) {
-        const col = cfg.colors[classification];
-        style += `border-left: 3px solid ${col};`;
-      }
-      return style;
-    }
+    if (cfg.fill_mode === "premium")
+      return this._premiumGradient(c);
 
-    // clear – bez tła, ale można zostawić pasek z boku
-    if (classification) {
-      const col = cfg.colors[classification];
-      style += `border-left: 3px solid ${col};`;
-    }
+    if (cfg.fill_mode === "gradient")
+      return this._classicGradient(c);
 
-    return style;
+    if (cfg.fill_mode === "zebra")
+      return index % 2 === 1
+        ? `background:${this._rgba(cfg.zebra_color, cfg.zebra_alpha)};border-left:3px solid ${c}`
+        : `border-left:3px solid ${c}`;
+
+    return `border-left:3px solid ${c}`;
   }
 
-  _rgba(hex, alpha) {
-    if (!hex) return `rgba(0,0,0,${alpha})`;
+  _classicGradient(color) {
+    const g = this.config.gradient;
+    return `
+      background: linear-gradient(to right,
+        rgba(0,0,0,0) 0%,
+        ${this._rgba(color, g.alpha_start)} ${g.start}%,
+        ${this._rgba(color, g.alpha_end)} ${g.end}%,
+        rgba(0,0,0,0) 100%
+      );
+      border-left:3px solid ${color};
+    `;
+  }
+
+  _premiumGradient(color) {
+    const p = this.config.premium;
+    return `
+      background: linear-gradient(to right,
+        ${this._rgba(color, p.start_alpha)} 0%,
+        ${this._rgba(color, p.mid_alpha)} ${p.pastel_pos}%,
+        ${this._rgba(color, p.end_alpha)} 100%
+      );
+      border-left:3px solid ${color};
+    `;
+  }
+
+  _rgba(hex, a) {
     const h = hex.replace("#", "");
-    if (h.length !== 6) return `rgba(0,0,0,${alpha})`;
-    const r = parseInt(h.substr(0, 2), 16);
-    const g = parseInt(h.substr(2, 2), 16);
-    const b = parseInt(h.substr(4, 2), 16);
-    return `rgba(${r},${g},${b},${alpha})`;
+    const r = parseInt(h.substring(0,2),16);
+    const g = parseInt(h.substring(2,4),16);
+    const b = parseInt(h.substring(4,6),16);
+    return `rgba(${r},${g},${b},${a})`;
   }
 
   static getConfigElement() {
@@ -787,32 +646,11 @@ class LeagueTableCard extends HTMLElement {
   }
 
   static getStubConfig() {
-    // Od razu po dodaniu karty YAML będzie pełny
-    return {
-      entity: "sensor.90minut_gornik_zabrze_table",
-      name: "Tabela ligowa",
-      show_name: true,
-      lite_mode: false,
+    const cfg = {
+      entity: "",
       fill_mode: "gradient",
-      gradient: {
-        start: 35,
-        end: 100,
-        alpha_start: 0.0,
-        alpha_end: 0.55,
-      },
-      zebra_color: "#f0f0f0",
-      zebra_alpha: 0.4,
-      highlight: {
-        top_count: 2,
-        conf_count: 2,
-        bottom_count: 3,
-      },
-      colors: {
-        top: "#3ba55d",
-        conf: "#468cd2",
-        bottom: "#e23b3b",
-      },
     };
+    return cfg;
   }
 
   getCardSize() {
@@ -828,8 +666,9 @@ window.customCards = window.customCards || [];
 window.customCards.push({
   type: "league-table-card",
   name: "League Table Card (90minut)",
-  description: "Tabela ligowa na podstawie sensora 90minut.pl",
+  description: "Tabela ligowa z sensora 90minut.pl (premium gradient ready)",
 });
+
 // ===== FILE INCLUDED: dist/matches-card-editor.js =====
 // ============================================================================
 //  Matches Card Editor – YAML sync, debounce, pełna konfiguracja + PREMIUM
@@ -1367,7 +1206,7 @@ class MatchesCard extends HTMLElement {
       }
 
       .crest-box {
-        background: rgba(255,255,255,0.5);
+        background: rgba(255,255,255,1);
         border-radius: 10px;
         padding: 4px;
         display:flex;
