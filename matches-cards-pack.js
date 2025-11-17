@@ -1,4 +1,4 @@
-// Matches Cards Pack – version 0.3.203
+// Matches Cards Pack – version 1.0.00
 // Auto-generated from dist/
 
 // ===== FILE INCLUDED: dist/league-table-card-editor.js =====
