@@ -1,16 +1,14 @@
 // ============================================================================
-//  League Table Card – VISUAL EDITOR
-//  Works with: LeagueTableCard (90minut)
-//  Debounce: 700ms
+//  League Table Card Editor – v0.1.100
 // ============================================================================
 
 class LeagueTableCardEditor extends HTMLElement {
 
   constructor() {
     super();
-    this._config = {};
-    this._debounceTimer = null;
     this.attachShadow({ mode: "open" });
+    this._config = {};
+    this._debounce = null;
   }
 
   setConfig(config) {
@@ -18,191 +16,210 @@ class LeagueTableCardEditor extends HTMLElement {
     this.render();
   }
 
-  set hass(hass) {
-    this._hass = hass;
-  }
-
-  // Debounce write
-  _debounceSave() {
-    clearTimeout(this._debounceTimer);
-    this._debounceTimer = setTimeout(() => {
-      this._onChange();
-    }, 700);
-  }
-
-  _onChange() {
-    const event = new CustomEvent("config-changed", {
-      detail: { config: this._config },
-      bubbles: true,
-      composed: true,
-    });
-    this.dispatchEvent(event);
-  }
-
+  // -------------------------------------------------------
+  // deep update
+  // -------------------------------------------------------
   _update(path, value) {
-    const parts = path.split(".");
+    const keys = path.split(".");
     let obj = this._config;
-    for (let i = 0; i < parts.length - 1; i++) {
-      if (!obj[parts[i]]) obj[parts[i]] = {};
-      obj = obj[parts[i]];
+
+    for (let i = 0; i < keys.length - 1; i++) {
+      if (!obj[keys[i]]) obj[keys[i]] = {};
+      obj = obj[keys[i]];
     }
-    obj[parts[parts.length - 1]] = value;
-    this._debounceSave();
+
+    obj[keys[keys.length - 1]] = value;
+
+    clearTimeout(this._debounce);
+    this._debounce = setTimeout(() => this._apply(), 700);
+  }
+
+  _apply() {
+    this.dispatchEvent(
+      new CustomEvent("config-changed", {
+        detail: { config: this._config },
+        bubbles: true,
+        composed: true,
+      })
+    );
   }
 
   render() {
-    if (!this.shadowRoot) return;
-
-    const cfg = this._config;
+    const c = this._config;
 
     this.shadowRoot.innerHTML = `
       <style>
-        .section {
-          border: 1px solid rgba(150,150,150,0.25);
-          border-radius: 8px;
+        .group {
           margin: 12px 0;
+          border-radius: 8px;
+          border: 1px solid rgba(255,255,255,0.15);
           overflow: hidden;
         }
-        .section-header {
-          background: rgba(200,200,200,0.15);
-          padding: 10px;
-          font-weight: 600;
+
+        .group summary {
+          padding: 10px 12px;
           cursor: pointer;
+          background: rgba(255,255,255,0.06);
+          font-size: 1rem;
         }
-        .section-body {
-          padding: 12px;
+
+        .group > div {
+          padding: 10px 16px 18px 16px;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 12px;
         }
-        .row {
+
+        label {
+          display: flex;
+          flex-direction: column;
+          font-size: 0.85rem;
+          opacity: 0.85;
+        }
+
+        input[type="number"],
+        input[type="color"],
+        input[type="text"] {
+          padding: 4px 6px;
+          border-radius: 6px;
+          border: 1px solid rgba(255,255,255,0.20);
+          background: rgba(0,0,0,0.2);
+          color: inherit;
+        }
+
+        .switch {
           display: flex;
           align-items: center;
-          margin: 8px 0;
-        }
-        .row label {
-          flex: 1;
-        }
-        input[type="number"], input[type="text"], ha-textfield, ha-selector-color {
-          flex: 1;
+          gap: 10px;
         }
       </style>
 
-      <div class="section">
-        <div class="section-header" id="sec-basic">⚽ Podstawowe</div>
-        <div class="section-body" style="display:block">
-          <div class="row">
-            <label>Nazwa wyświetlana</label>
-            <input type="text" value="${cfg.name ?? ""}"
-              @input="${(e)=>this._update('name', e.target.value)}">
-          </div>
+      <!-- BASIC -->
+      <details class="group" open>
+        <summary>Podstawowe</summary>
+        <div>
+          <label>
+            Nazwa
+            <input type="text"
+                   value="${c.name ?? ''}"
+                   @input="${e => this._update('name', e.target.value)}">
+          </label>
 
-          <div class="row">
-            <label>Pokaż nazwę karty</label>
+          <label class="switch">
             <ha-switch
-              ?checked="${cfg.show_name !== false}"
-              @change="${(e)=>this._update('show_name', e.target.checked)}">
+              ?checked="${c.show_name !== false}"
+              @change="${e => this._update('show_name', e.target.checked)}">
             </ha-switch>
-          </div>
+            Pokaż nazwę
+          </label>
 
-          <div class="row">
-            <label>Tryb LITE</label>
+          <label class="switch">
             <ha-switch
-              ?checked="${cfg.lite_mode === true}"
-              @change="${(e)=>this._update('lite_mode', e.target.checked)}">
+              ?checked="${c.lite_mode === true}"
+              @change="${e => this._update('lite_mode', e.target.checked)}">
             </ha-switch>
-          </div>
+            Tryb LITE
+          </label>
 
-          <div class="row">
-            <label>Pokaż trend</label>
+          <label class="switch">
             <ha-switch
-              ?checked="${cfg.show_trend !== false}"
-              @change="${(e)=>this._update('show_trend', e.target.checked)}">
+              ?checked="${c.show_trend !== false}"
+              @change="${e => this._update('show_trend', e.target.checked)}">
             </ha-switch>
-          </div>
+            Pokaż trend
+          </label>
         </div>
-      </div>
+      </details>
 
-      <div class="section">
-        <div class="section-header" id="sec-fonts">🔤 Czcionki</div>
-        <div class="section-body" style="display:none">
-          <div class="row">
-            <label>Nagłówek (rem)</label>
-            <input type="number" step="0.1" min="0.5"
-              value="${cfg.font_size?.header ?? 0.8}"
-              @input="${(e)=>this._update('font_size.header', Number(e.target.value))}">
-          </div>
-          <div class="row">
-            <label>Wiersz (rem)</label>
-            <input type="number" step="0.1" min="0.5"
-              value="${cfg.font_size?.row ?? 0.9}"
-              @input="${(e)=>this._update('font_size.row', Number(e.target.value))}">
-          </div>
-          <div class="row">
-            <label>Drużyna (rem)</label>
-            <input type="number" step="0.1" min="0.5"
-              value="${cfg.font_size?.team ?? 1.0}"
-              @input="${(e)=>this._update('font_size.team', Number(e.target.value))}">
-          </div>
+      <!-- FONT SIZES -->
+      <details class="group">
+        <summary>Rozmiary czcionek</summary>
+        <div>
+          <label>
+            Nagłówek
+            <input type="number" step="0.1"
+                   value="${c.font_size?.header ?? 0.8}"
+                   @input="${e => this._update('font_size.header', Number(e.target.value))}">
+          </label>
+
+          <label>
+            Wiersze
+            <input type="number" step="0.1"
+                   value="${c.font_size?.row ?? 0.9}"
+                   @input="${e => this._update('font_size.row', Number(e.target.value))}">
+          </label>
+
+          <label>
+            Drużyna
+            <input type="number" step="0.1"
+                   value="${c.font_size?.team ?? 1.0}"
+                   @input="${e => this._update('font_size.team', Number(e.target.value))}">
+          </label>
         </div>
-      </div>
+      </details>
 
-      <div class="section">
-        <div class="section-header" id="sec-highlight">🎨 Wyróżnienia</div>
-        <div class="section-body" style="display:none">
+      <!-- COLORS -->
+      <details class="group">
+        <summary>Kolory stref</summary>
+        <div>
+          <label>
+            Liga Mistrzów
+            <input type="color"
+                   value="${c.colors?.top ?? "#3ba55d"}"
+                   @input="${e => this._update('colors.top', e.target.value)}">
+          </label>
 
-          <div class="row">
-            <label>Top ile?</label>
+          <label>
+            Liga Konferencji
+            <input type="color"
+                   value="${c.colors?.conference ?? "#468cd2"}"
+                   @input="${e => this._update('colors.conference', e.target.value)}">
+          </label>
+
+          <label>
+            Spadek
+            <input type="color"
+                   value="${c.colors?.bottom ?? "#e23b3b"}"
+                   @input="${e => this._update('colors.bottom', e.target.value)}">
+          </label>
+
+          <label>
+            Moja drużyna
+            <input type="color"
+                   value="${c.colors?.favorite ?? "#fff7c2"}"
+                   @input="${e => this._update('colors.favorite', e.target.value)}">
+          </label>
+        </div>
+      </details>
+
+      <!-- HIGHLIGHT -->
+      <details class="group">
+        <summary>Strefy pozycji</summary>
+        <div>
+          <label>
+            TOP (LM)
+            <input type="number" min="1" max="10"
+                   value="${c.highlight?.top_count ?? 2}"
+                   @input="${e => this._update('highlight.top_count', Number(e.target.value))}">
+          </label>
+
+          <label>
+            Konferencje
             <input type="number" min="0" max="10"
-              value="${cfg.highlight?.top_count ?? 3}"
-              @input="${(e)=>this._update('highlight.top_count', Number(e.target.value))}">
-          </div>
+                   value="${c.highlight?.conference_count ?? 2}"
+                   @input="${e => this._update('highlight.conference_count', Number(e.target.value))}">
+          </label>
 
-          <div class="row">
-            <label>Spadkowe ile?</label>
-            <input type="number" min="0" max="10"
-              value="${cfg.highlight?.bottom_count ?? 3}"
-              @input="${(e)=>this._update('highlight.bottom_count', Number(e.target.value))}">
-          </div>
-
-          <div class="row">
-            <label>Kolor ulubionej</label>
-            <ha-color-picker
-              value="${cfg.highlight?.favorite_color ?? '#fff8e1'}"
-              @color-changed="${(e)=>this._update('highlight.favorite_color', e.detail.value)}">
-            </ha-color-picker>
-          </div>
-
-          <div class="row">
-            <label>Kolor TOP</label>
-            <ha-color-picker
-              value="${cfg.highlight?.top_color ?? '#e8f5e9'}"
-              @color-changed="${(e)=>this._update('highlight.top_color', e.detail.value)}">
-            </ha-color-picker>
-          </div>
-
-          <div class="row">
-            <label>Kolor DOŁU</label>
-            <ha-color-picker
-              value="${cfg.highlight?.bottom_color ?? '#ffebee'}"
-              @color-changed="${(e)=>this._update('highlight.bottom_color', e.detail.value)}">
-            </ha-color-picker>
-          </div>
+          <label>
+            Spadek
+            <input type="number" min="1" max="10"
+                   value="${c.highlight?.bottom_count ?? 3}"
+                   @input="${e => this._update('highlight.bottom_count', Number(e.target.value))}">
+          </label>
         </div>
-      </div>
+      </details>
     `;
-
-    // Sekcje rozwijane
-    const toggle = (id) => {
-      const body = this.shadowRoot.querySelector(`#${id}`).nextElementSibling;
-      body.style.display = body.style.display === "none" ? "block" : "none";
-    };
-
-    this.shadowRoot.querySelector("#sec-basic")
-      .addEventListener("click", () => toggle("sec-basic"));
-    this.shadowRoot.querySelector("#sec-fonts")
-      .addEventListener("click", () => toggle("sec-fonts"));
-    this.shadowRoot.querySelector("#sec-highlight")
-      .addEventListener("click", () => toggle("sec-highlight"));
   }
 }
 
-// Rejestracja edytora
 customElements.define("league-table-card-editor", LeagueTableCardEditor);
